@@ -134,6 +134,3 @@ results/        summary tables and figures
 - MuJoCo physics engine
 - Code adapted from weekly tutorials, MuJoCo examples and the Robotics Toolbox: TBC (list specific files)
 
-## 13. Licence
-
-TBC
