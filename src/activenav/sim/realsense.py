@@ -122,6 +122,10 @@ _ALONG_Y = [np.cos(np.pi / 4), -np.sin(np.pi / 4), 0.0, 0.0]                 # c
 _SERVO = (0.0465, 0.0285, 0.034)                                             # long side, short side, along the horn axis [m]
 _HORN_FROM_END = 0.0113
 _SERVO_RGBA, _HORN_RGBA, _BRACKET_RGBA = [0.07, 0.07, 0.08, 1], [0.72, 0.72, 0.74, 1], [0.60, 0.61, 0.64, 1]
+# The Waffle Pi's top plate is 15.5 mm below the pan joint origin of the head model (plate at z = 0.110 m in the base
+# frame, measured by a ray cast on the base mesh). The pan axis is vertical, so only the tilt-axis height matters for
+# the kinematics: the pan servo sits on the plate and the bracket reaches up to the same tilt axis.
+_PLATE_BELOW_PAN = 0.0155
 
 
 def build_pan_tilt(spec: mujoco.MjSpec, cam_width: float) -> None:
@@ -138,12 +142,13 @@ def build_pan_tilt(spec: mujoco.MjSpec, cam_width: float) -> None:
     tz = float(np.array(tilt.pos, float)[2])                                  # tilt axis height above the pan origin
     L, S, H = _SERVO
     back = L / 2 - _HORN_FROM_END                                             # servo centre behind its horn axis
+    zb = -_PLATE_BELOW_PAN                                                    # top plate, in the pan frame
     # pan servo, fixed to the robot: lying on the plate, horn axis = pan axis
-    _add(base, "pan_servo", _BOX, [L / 2, S / 2, H / 2], list(po + [-back, 0.0, H / 2]), _SERVO_RGBA)
+    _add(base, "pan_servo", _BOX, [L / 2, S / 2, H / 2], list(po + [-back, 0.0, zb + H / 2]), _SERVO_RGBA)
     # turning with the pan: horn, U-bracket (plate + two arms), tilt servo, idler
-    _add(pan, "pan_horn", _CYL, [0.0125, 0.00125, 0], [0, 0, H + 0.00125], _HORN_RGBA)
+    _add(pan, "pan_horn", _CYL, [0.0125, 0.00125, 0], [0, 0, zb + H + 0.00125], _HORN_RGBA)
     gap, t = cam_width / 2 + 0.006, 0.0025                                    # half the inner width, plate thickness
-    z0, z1 = H + 0.0025, tz + 0.014                                           # bracket from the horn up past the tilt axis
+    z0, z1 = zb + H + 0.0025, tz + 0.014                                      # bracket from the horn up past the tilt axis
     _add(pan, "bracket_plate", _BOX, [0.016, gap + t, t / 2], [0, 0, z0 + t / 2], _BRACKET_RGBA)
     for i, s in enumerate((-1, 1)):
         _add(pan, f"bracket_arm_{i}", _BOX, [0.012, t / 2, (z1 - z0) / 2], [0, s * (gap + t / 2), (z0 + z1) / 2], _BRACKET_RGBA)
