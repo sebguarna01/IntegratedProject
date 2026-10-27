@@ -1,0 +1,429 @@
+# All tunable values live here. Values marked TBC are initial guesses.
+seed: 0
+
+sim:
+  model: models/docking_scene.xml
+  control_dt: 0.02            # s, control / odometry rate (50 Hz)
+  camera:
+    name: head_cam
+    width: 640
+    height: 480
+
+noise:                         # TBC: initial values, to be justified (see docs)
+  encoder_ticks_per_rev: 4096  # encoder resolution (TBC: check against the motor datasheet)
+  encoder_mult_std: 0.01       # random multiplicative noise per wheel-angle increment
+  encoder_add_std: 0.0         # additive noise per step [rad]
+  wheel_scale_std: 0.005       # per-trial systematic wheel radius error (std, each wheel)
+  track_width_error_std: 0.01  # per-trial systematic track-width error (std)
+  head_encoder_std: 0.002      # pan/tilt encoder noise [rad]
+
+start_pose: [1.0, -0.5, 0.0]   # x [m], y [m], yaw [rad] (room spans x 0..6, y -2..2)
+
+square:                        # Week 1 odometry-drift test
+  waypoints: [[2.0, -0.5], [2.0, 0.5], [1.0, 0.5], [1.0, -0.5]]
+  laps: 2
+  v_max: 0.2
+  w_max: 1.0
+  max_time: 300.0
+
+study:                         # odometry-only baseline over many seeds (scripts/odometry_baseline.py study)
+  trials: 30
+  laps: 4
+
+crossing:                      # odometry-only room crossing (scripts/odometry_baseline.py crossing)
+  start_pose: [0.5, -1.0, 0.0]
+  goal: [5.5, 1.0]             # dock point (x, y)
+  v_max: 0.2
+  w_max: 1.0
+  max_time: 300.0
+  tolerances_m: [0.10, 0.25]   # TBC: docking tolerances to be defined and justified
+
+head:                          # pan-tilt head geometry (must match models/docking_scene.xml)
+  pan_origin: [-0.049, 0.0, 0.1255]   # pan joint in the base frame [m]
+  tilt_offset: [0.0, 0.0, 0.065]      # tilt joint relative to the pan frame [m]
+  camera_offset: [0.022, 0.0, 0.0]    # camera relative to the tilt frame [m]
+  base_height: 0.0                    # height of the base-frame origin above the floor [m] (camera is ~0.19 m up)
+
+camera_model:                  # checkerboard calibration (scripts/calibrate_camera.py): fx 415.5, fy 415.5, cx 319.9, cy 238.7 px, within 1 px of the analytic values below; distortion indistinguishable from zero
+  fovy_deg: 60.0               # must match models/docking_scene.xml
+  image_noise_std: 2.0         # TBC: Gaussian pixel noise added to rendered images [gray levels, 0-255]
+
+perception:
+  marker_size_m: 0.30          # black square side; the plates in the scene are 0.40 m
+
+ekf:                           # Config B / C estimator. Values derived from results/marker_characterisation.csv
+  estimate_bias: true          # add odometry-calibration states c (rad/m heading drift), s (distance scale), k (turn scale)
+  bias_init_std: [0.03, 0.01, 0.02]  # initial std of [c rad/m, s, k]; 0.5% wheel scale -> c ~0.025; k covers 2+ sigma track errors
+  bias_walk: [0.002, 0.001, 0.002]   # random-walk std of [c, s] per sqrt(metre driven), [k] per sqrt(radian turned)
+  init_std: [0.02, 0.02, 0.02] # initial pose std [m, m, rad]: the start pose is known
+  # Process noise on each odometry increment (ds metres, dtheta radians), 1 sigma:
+  #   sigma_ds     = k_ds * |ds|
+  #   sigma_dtheta = k_dth * |dtheta| + k_dth_ds * |ds|
+  # Chosen above the per-trial systematic encoder errors (0.5% wheel scale, 1% track width,
+  # configs noise:) because the filter treats them as white. Tune with the NEES check in ekf_crossing.py.
+  k_ds: 0.02
+  k_dth: 0.03
+  k_dth_ds: 0.01               # rad per metre driven
+  # Measurement noise, 1 sigma, as a function of true range r [m]. Fitted to the characterisation
+  # CSV then inflated about 1.5-2x for model error (the filter must not be over-confident).
+  range_sigma: [0.004, 0.002]          # a + b * r^2  [m]
+  range_bias_coeff: 0.0023             # measured range overestimates by c * r^2: subtracted in the update
+  bearing_sigma_rad: 0.005             # head encoder noise is 0.002 rad; rest is camera kinematics error
+  normal_sigma_deg: [0.3, 0.06]        # a + b * r^3 [deg]: marker orientation is poor at long range
+  max_range: 5.0               # ignore detections beyond this (normal error explodes past ~4.5 m)
+  min_range: 0.3
+  use_normal: true             # use the marker-normal direction as a heading measurement
+  gate_chi2: 11.34             # chi-square, 3 dof, 99%: reject measurements with larger NIS
+
+camera_rate_hz: 10.0           # how often the camera is rendered / marker measurements are fused
+
+gaze:                          # active gaze (behaviour/gaze.py)
+  replan_s: 0.5                # re-choose where to look this often [s]
+  slew_rad_s: 1.5              # head command rate limit [rad/s]
+  switch_cost_per_rad: 0.05    # penalty (nats) per radian of head movement, avoids dithering
+  n_candidates: 25             # pan angles scored
+  max_view_deg: 70.0           # do not expect detections of markers seen more obliquely than this
+
+# ---------------------------------------------------------------------------------------------
+# Worlds (environment V2). Scene XML, the surveyed obstacle map, the planner grid and the synthetic
+# sensor's occlusion test are all generated from these, so they can never disagree.
+#   world: null            -> use the hand-written sim.model (6x4 regression scene, reproduces all earlier results)
+#   world: room_10x6       -> generate the scene from `worlds.room_10x6`
+# Override per run with e.g.  --set world=room_10x6
+world: null
+
+robot:
+  radius: 0.25                 # circumscribed radius of the Waffle Pi base about the base origin [m]
+  plan_margin: 0.05            # extra clearance the planner keeps [m]
+
+layout_rules:                  # checked when a world is built (sim/world.py: validate_world)
+  min_pillar_wall_clearance: 1.0   # pillar surface to nearest wall [m]
+  min_pillar_gap: 0.8              # surface to surface between pillars [m]
+
+worlds:
+  room_6x4:                    # same geometry as models/docking_scene.xml (proved equal by tests/test_world.py)
+    size: [6.0, 4.0]           # x 0..6, y -2..2
+    wall_height: 0.6
+    start: [1.0, -0.5, 0.0]
+    markers:                   # wall: east|west|north|south, s: position along that wall (y for east/west, x for north/south)
+      - {id: 0,  wall: east,  s: -1.0}
+      - {id: 10, wall: east,  s: 1.0}     # docking station
+      - {id: 1,  wall: north, s: 4.0}
+      - {id: 2,  wall: north, s: 1.5}
+      - {id: 3,  wall: south, s: 4.0}
+      - {id: 4,  wall: south, s: 1.5}
+      - {id: 5,  wall: west,  s: 0.0}
+    pillars: null
+  room_10x6:                   # environment V2
+    size: [10.0, 6.0]          # x 0..10, y -3..3
+    wall_height: 2.4
+    start: [0.6, -2.2, 0.0]
+    markers:                   # same 7 ids as the 6x4 room, spread over a 2.5x larger floor so coverage has gaps
+      - {id: 0,  wall: east,  s: -1.0}
+      - {id: 10, wall: east,  s: 1.0}     # docking station
+      - {id: 1,  wall: north, s: 7.5}
+      - {id: 2,  wall: north, s: 2.5}
+      - {id: 3,  wall: south, s: 7.5}
+      - {id: 4,  wall: south, s: 2.5}
+      - {id: 5,  wall: west,  s: 0.0}
+    pillars:                   # 3 x 2 regular grid centred in the room, full height, deterministic
+      nx: 3
+      ny: 2
+      spacing: [3.0, 2.4]      # centre-to-centre along x and y [m]  (pillar centres x = 2, 5, 8; y = -1.2, +1.2)
+      radius: 0.3
+      height: 2.4
+      center: [5.0, 0.0]
+  room_10x6_empty:             # same room and markers as room_10x6, no pillars
+    size: [10.0, 6.0]
+    wall_height: 2.4
+    start: [0.6, -2.2, 0.0]
+    markers:
+      - {id: 0,  wall: east,  s: -1.0}
+      - {id: 10, wall: east,  s: 1.0}
+      - {id: 1,  wall: north, s: 7.5}
+      - {id: 2,  wall: north, s: 2.5}
+      - {id: 3,  wall: south, s: 7.5}
+      - {id: 4,  wall: south, s: 2.5}
+      - {id: 5,  wall: west,  s: 0.0}
+    pillars: null
+  room_10x6_p4: &room_p4       # same room and markers as room_10x6, four pillars in a 2 x 2 grid
+    size: [10.0, 6.0]
+    wall_height: 2.4
+    start: [0.6, -2.2, 0.0]
+    markers:
+      - {id: 0,  wall: east,  s: -1.0}
+      - {id: 10, wall: east,  s: 1.0}
+      - {id: 1,  wall: north, s: 7.5}
+      - {id: 2,  wall: north, s: 2.5}
+      - {id: 3,  wall: south, s: 7.5}
+      - {id: 4,  wall: south, s: 2.5}
+      - {id: 5,  wall: west,  s: 0.0}
+    pillars:                   # pillar centres x = 3.5, 6.5; y = -1.2, +1.2
+      nx: 2
+      ny: 2
+      spacing: [3.0, 2.4]
+      radius: 0.3
+      height: 2.4
+      center: [5.0, 0.0]
+
+  room_p4_people_const:        # room_10x6_p4 with three people walking straight at a constant speed (they bounce off walls, pillars, each other)
+    <<: *room_p4
+    people: {count: 3, mode: constant, speed: 0.4, radius: 0.2, height: 1.7, yield_gap: 0.35}
+  room_p4_people_random:       # same room; the people wander: the heading random-walks and the speed drifts around 0.4 m/s
+    <<: *room_p4
+    people: {count: 3, mode: random, speed: 0.4, radius: 0.2, height: 1.7, yield_gap: 0.35, turn_rate_std: 0.8, speed_std: 0.15}
+
+  room_10x10_p9:               # bigger and more cluttered: 10 x 10 m, 3 x 3 pillars, ten markers
+    size: [10.0, 10.0]         # x 0..10, y -5..5
+    wall_height: 2.4
+    start: [0.6, -4.2, 0.0]
+    markers:
+      - {id: 0,  wall: east,  s: -3.0}
+      - {id: 10, wall: east,  s: 2.5}     # docking station
+      - {id: 1,  wall: north, s: 7.5}
+      - {id: 2,  wall: north, s: 2.5}
+      - {id: 7,  wall: north, s: 5.0}
+      - {id: 3,  wall: south, s: 7.5}
+      - {id: 4,  wall: south, s: 2.5}
+      - {id: 8,  wall: south, s: 5.0}
+      - {id: 5,  wall: west,  s: -2.0}
+      - {id: 6,  wall: west,  s: 2.5}
+    pillars:                   # centres x = 2, 5, 8; y = -3, 0, 3
+      nx: 3
+      ny: 3
+      spacing: [3.0, 3.0]
+      radius: 0.3
+      height: 2.4
+      center: [5.0, 0.0]
+  room_l:                      # L-shaped: 10 x 10 m with the north-east quarter filled in. Wall blocks hide no markers.
+    size: [10.0, 10.0]
+    wall_height: 2.4
+    start: [0.8, 3.8, 0.0]
+    blocks:                    # [x0, y0, x1, y1]
+      - [5.0, 0.0, 10.0, 5.0]
+    markers:
+      - {id: 0,  wall: east,  s: -4.0}
+      - {id: 10, wall: east,  s: -2.0}    # docking station: far end of the bottom arm
+      - {id: 1,  wall: north, s: 1.5}
+      - {id: 2,  wall: north, s: 3.8}
+      - {id: 3,  wall: south, s: 2.5}
+      - {id: 4,  wall: south, s: 7.5}
+      - {id: 5,  wall: west,  s: -2.0}
+      - {id: 6,  wall: west,  s: 2.5}
+    pillars: null
+  room_two_rooms:              # two 6 x 6 m rooms joined by a 1.4 m doorway: the dock is in the other room from the start
+    size: [12.0, 6.0]          # x 0..12, y -3..3
+    wall_height: 2.4
+    start: [1.0, -2.0, 0.0]
+    blocks:
+      - [5.9, -3.0, 6.1, -0.5]
+      - [5.9, 0.9, 6.1, 3.0]
+    markers:
+      - {id: 5,  wall: west,  s: 0.0}
+      - {id: 1,  wall: north, s: 3.0}
+      - {id: 2,  wall: south, s: 3.0}
+      - {id: 3,  wall: north, s: 9.0}
+      - {id: 4,  wall: south, s: 9.0}
+      - {id: 0,  wall: east,  s: -1.5}
+      - {id: 10, wall: east,  s: 1.5}     # docking station
+    pillars: null
+  room_zigzag:                 # 12 x 6 m with two staggered partitions: an S-shaped route to the dock
+    size: [12.0, 6.0]
+    wall_height: 2.4
+    start: [1.0, -2.0, 0.0]
+    blocks:
+      - [3.9, -3.0, 4.1, 1.4]  # gap at the north end
+      - [7.9, -1.4, 8.1, 3.0]  # gap at the south end
+    markers:
+      - {id: 5,  wall: west,  s: 0.0}
+      - {id: 1,  wall: north, s: 2.0}
+      - {id: 2,  wall: south, s: 2.0}
+      - {id: 3,  wall: north, s: 6.0}
+      - {id: 4,  wall: south, s: 6.0}
+      - {id: 6,  wall: north, s: 10.0}
+      - {id: 7,  wall: south, s: 10.0}
+      - {id: 0,  wall: east,  s: -1.5}
+      - {id: 10, wall: east,  s: 1.5}     # docking station
+    pillars: null
+
+  room_corridor:               # long, narrow: 16 x 2.4 m. Side markers are always seen obliquely; the dock is at the far end
+    size: [16.0, 2.4]          # x 0..16, y -1.2..1.2
+    wall_height: 2.4
+    start: [0.8, 0.0, 0.0]
+    markers:
+      - {id: 5,  wall: west,  s: 0.0}
+      - {id: 0,  wall: south, s: 2.0}
+      - {id: 1,  wall: north, s: 3.5}
+      - {id: 2,  wall: south, s: 6.5}
+      - {id: 3,  wall: north, s: 9.5}
+      - {id: 4,  wall: south, s: 12.0}
+      - {id: 6,  wall: north, s: 13.5}
+      - {id: 10, wall: east,  s: 0.0}     # docking station
+    pillars: null
+  room_alcove:                 # 10 x 6 m, the dock sits at the back of a 1.6 m wide, 2.5 m deep niche in the east wall
+    size: [10.0, 6.0]
+    wall_height: 2.4
+    start: [0.8, -2.2, 0.0]
+    blocks:
+      - [7.5, -3.0, 10.0, -0.8]
+      - [7.5, 0.8, 10.0, 3.0]
+    markers:
+      - {id: 5,  wall: west,  s: 0.0}
+      - {id: 1,  wall: north, s: 2.5}
+      - {id: 2,  wall: north, s: 6.0}
+      - {id: 3,  wall: south, s: 2.5}
+      - {id: 4,  wall: south, s: 6.0}
+      - {id: 0,  wall: south, s: 6.9}
+      - {id: 10, wall: east,  s: 0.0}     # docking station (back of the niche)
+    pillars: null
+  room_14x14_cluttered:        # 14 x 14 m, 16 pillars (4 x 4, 3.2 m pitch) and 6 crates in the gaps between them (every gap >= 1.5 m), 11 markers
+    size: [14.0, 14.0]         # x 0..14, y -7..7
+    wall_height: 2.4
+    start: [0.8, -6.2, 0.0]
+    blocks:                    # crates 0.6 x 0.6 m at the centres of six of the nine pillar cells
+      - [3.5, -3.5, 4.1, -2.9]
+      - [9.9, -3.5, 10.5, -2.9]
+      - [6.7, -0.3, 7.3, 0.3]
+      - [3.5, 2.9, 4.1, 3.5]
+      - [9.9, 2.9, 10.5, 3.5]
+      - [6.7, -3.5, 7.3, -2.9]
+    markers:
+      - {id: 0,  wall: east,  s: -4.5}
+      - {id: 10, wall: east,  s: 2.5}     # docking station
+      - {id: 1,  wall: north, s: 3.5}
+      - {id: 2,  wall: north, s: 7.0}
+      - {id: 7,  wall: north, s: 10.5}
+      - {id: 3,  wall: south, s: 3.5}
+      - {id: 4,  wall: south, s: 7.0}
+      - {id: 8,  wall: south, s: 10.5}
+      - {id: 5,  wall: west,  s: -3.0}
+      - {id: 6,  wall: west,  s: 3.0}
+      - {id: 9,  wall: west,  s: 5.5}
+    pillars:                   # centres x = 2.2, 5.4, 8.6, 11.8; y = -4.8, -1.6, 1.6, 4.8
+      nx: 4
+      ny: 4
+      spacing: [3.2, 3.2]
+      radius: 0.3
+      height: 2.4
+      center: [7.0, 0.0]
+  room_10x6_sparse:            # room_10x6 with only three markers (west, south, dock): long stretches with nothing to see
+    size: [10.0, 6.0]
+    wall_height: 2.4
+    start: [0.6, -2.2, 0.0]
+    markers:
+      - {id: 5,  wall: west,  s: 0.0}
+      - {id: 3,  wall: south, s: 7.5}
+      - {id: 10, wall: east,  s: 1.0}     # docking station
+    pillars:
+      nx: 3
+      ny: 2
+      spacing: [3.0, 2.4]
+      radius: 0.3
+      height: 2.4
+      center: [5.0, 0.0]
+
+# Levels: named environments for the viewer and the studies (--level NAME). A level is a world plus a note.
+levels:
+  small_room:
+    world: room_6x4
+    description: "6 x 4 m, no obstacles, 7 markers (the original regression room)"
+  large_room:
+    world: room_10x6_empty
+    description: "10 x 6 m, no obstacles, 7 markers"
+  large_4_pillars:
+    world: room_10x6_p4
+    description: "10 x 6 m, 4 pillars in a 2 x 2 grid, 7 markers"
+  large_6_pillars:
+    world: room_10x6
+    description: "10 x 6 m, 6 pillars in a 3 x 2 grid, 7 markers (environment V2)"
+  large_9_pillars:
+    world: room_10x10_p9
+    description: "10 x 10 m, 9 pillars in a 3 x 3 grid, 10 markers"
+  l_room:
+    world: room_l
+    description: "L-shaped (10 x 10 m with a quarter filled in), 8 markers, dock at the far end of the bottom arm"
+  two_rooms:
+    world: room_two_rooms
+    description: "two 6 x 6 m rooms joined by a 1.4 m doorway, 7 markers, dock in the east room"
+  zigzag:
+    world: room_zigzag
+    description: "12 x 6 m with two staggered partitions (S-shaped route), 9 markers"
+  corridor:
+    world: room_corridor
+    description: "16 x 2.4 m corridor, 8 markers, dock on the far end wall (side markers are seen obliquely)"
+  alcove:
+    world: room_alcove
+    description: "10 x 6 m room, dock at the back of a 1.6 m wide, 2.5 m deep niche in the east wall"
+  cluttered_14:
+    world: room_14x14_cluttered
+    description: "14 x 14 m, 16 pillars + 6 crates (gaps >= 1.5 m), 11 markers"
+  sparse_noisy_odom:
+    world: room_10x6_sparse
+    set: ["noise.wheel_scale_std=0.02", "noise.encoder_mult_std=0.03"]
+    description: "10 x 6 m, 6 pillars, only 3 markers, wheel scale error 4x and encoder noise 3x worse (EKF noise settings unchanged)"
+  people_constant:
+    world: room_p4_people_const
+    description: "10 x 6 m, 4 pillars, 7 markers, three people walking straight at 0.4 m/s (bouncing off walls, pillars and each other)"
+  people_random:
+    world: room_p4_people_random
+    description: "10 x 6 m, 4 pillars, 7 markers, three people wandering (random turns, speed drifting around 0.4 m/s)"
+  closing_door:
+    world: room_10x6_p4
+    available: false
+    description: "PLANNED: a door that closes part-way through the trial, so the route has to change"
+
+marker_heights: [0.2, 0.3, 0.45, 0.6]   # --heights: every marker (dock included) gets a centre height from this list, per seed [m]
+
+random_markers:                # --random-markers: re-place every marker except `keep_ids` on the walls, per seed
+  keep_ids: [10]               # the docking station stays where it is
+  min_spacing: 1.0             # between markers on the same wall [m]
+  corner_margin: 0.8           # distance from wall corners [m]
+
+obstacles:                     # camera-only obstacle sensing and mapping (autonomy/)
+  max_range: 3.0               # ground-plane ranging is trusted out to here [m]; floor beyond is not marked free or occupied
+  pixel_sigma: 0.7             # boundary-row error [px]; range error grows as r^2 (see sensing/floor.py)
+  n_rays: 48                   # image columns sampled per frame
+  grid_res: 0.05               # occupancy cell [m]
+  grid_size: 40.0              # grid side [m], centred on the start pose (the room is unknown)
+  l_occ: 0.85                  # log-odds added at a hit
+  l_free: -0.4                 # log-odds added along a ray
+  l_clamp: 4.0
+
+search:                        # autonomous search-and-dock (autonomy/): the robot knows no map and no marker positions
+  dock_marker: 10              # the id it is looking for
+  standoff: 0.5                # dock point: this far in front of the marker, facing it [m]
+  stage_extra: 0.4             # approach staging point is this much further out along the marker's normal [m]
+  follow: go_to_point          # path follower: go_to_point (waypoint chasing, default) or lqr (filleted planner path; see docs/methods.md)
+  fillet_radius: 0.15          # corner radius of the path the LQR tracks [m]
+  v_max: 0.2
+  w_max: 1.0
+  tilt_search: 0.2             # head tilt while exploring (looks at the floor ahead for ranging, still sees markers >= 0.7 m)
+  fixed_pan: 0.0       # config B only: the head never pans (not even to track the dock marker); null = old behaviour
+  fixed_tilt: 0.0              # B and C-sweep keep the head tilted at exactly this angle [rad] for the whole run (null: search tilt while
+                               # exploring, tilt_dock close to the marker). C-info chooses its own tilt.
+  tilt_dock: 0.0               # head tilt close to the marker so the whole plate stays in view
+  adaptive_dock_tilt: false    # B / C-sweep (with fixed_tilt: null) also set the tilt from the dock marker's measured height, as C-info does; a control for the ablation
+  plan_margin: 0.15            # clearance added to the robot radius when planning [m]
+  margin_sigma_k: 2.0          # ... plus this many sigma of position uncertainty
+  margin_max: 0.30
+  replan_s: 1.0
+  stuck_s: 8.0                 # wants to move but has not for this long: drop the target, back off, replan [s]
+  coarse_res: 0.1              # planning grid [m]
+  frontier_min_cells: 4
+  initial_scan: true           # look all the way round first: B turns its body, C sweeps its head
+  max_time: 900.0
+  gaze:
+    n_cand: 25
+    slew: 1.5                  # rad/s
+    replan_s: 0.5
+    switch_cost: 0.15
+    sweep_amp: 1.2             # C-sweep: pan swings +-this [rad] at constant rate (no look-where-you-go clamp)
+    sweep_period: 8.0          # C-sweep: seconds per full left-right-left cycle
+    tilt_cands: [0.2, 0.0, -0.25, -0.5]   # C-info chooses among these head tilts [rad, + = down]
+    w_marker: 0.5              # reward per not-yet-searched wall/unknown sample in view (out to marker range) where a marker would fit the view
+    marker_range: 4.5          # how far out the head looks for markers [m]
+    near_limit: 0.45           # near obstacles, only tilts that see the floor from this close are allowed [m]
+    switch_cost_tilt: 3.0      # penalty per radian of tilt change
+    w_unknown: 1.0             # reward per unknown map sample in view
+    w_landmark: 6.0            # reward for a known landmark in view when position uncertainty is high
+    sigma_ref: 0.15            # [m] localisation uncertainty above which landmarks are worth looking at
