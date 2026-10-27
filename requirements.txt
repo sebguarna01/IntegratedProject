@@ -1,0 +1,7 @@
+mujoco
+numpy
+scipy
+matplotlib
+pyyaml
+pytest
+opencv-contrib-python
