@@ -122,10 +122,11 @@ _ALONG_Y = [np.cos(np.pi / 4), -np.sin(np.pi / 4), 0.0, 0.0]                 # c
 _SERVO = (0.0465, 0.0285, 0.034)                                             # long side, short side, along the horn axis [m]
 _HORN_FROM_END = 0.0113
 _SERVO_RGBA, _HORN_RGBA, _BRACKET_RGBA = [0.07, 0.07, 0.08, 1], [0.72, 0.72, 0.74, 1], [0.60, 0.61, 0.64, 1]
-# The Waffle Pi's top plate is 15.5 mm below the pan joint origin of the head model (plate at z = 0.110 m in the base
-# frame, measured by a ray cast on the base mesh). The pan axis is vertical, so only the tilt-axis height matters for
-# the kinematics: the pan servo sits on the plate and the bracket reaches up to the same tilt axis.
-_PLATE_BELOW_PAN = 0.0155
+# The Waffle Pi's visible top plate is at z = 0.1015 m in the base frame under the servo (ray casts on the visual mesh
+# only; the invisible collision box tops out at 0.110 m), 24 mm below the head model's pan joint origin. The pan axis is
+# vertical, so only the tilt-axis height matters for the kinematics: the pan servo sits on the plate, 1.5 mm into it so
+# no gap shows from any angle (the plate's underside is at about 0.097 m), and the bracket reaches up to the same tilt axis.
+_PLATE_BELOW_PAN = 0.0255
 
 
 def build_pan_tilt(spec: mujoco.MjSpec, cam_width: float) -> None:
