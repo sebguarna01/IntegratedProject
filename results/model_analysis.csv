@@ -1,0 +1,29 @@
+analysis,case,rank,dim,min_singular_value_or_gap,note
+controllability,"pose model, v=0.0",2,3,0.0,rank 3 only while moving: a robot at rest cannot step sideways
+controllability,"pose model, v=0.05",3,3,0.05000000000000001,rank 3 only while moving: a robot at rest cannot step sideways
+controllability,"pose model, v=0.2",3,3,0.2,rank 3 only while moving: a robot at rest cannot step sideways
+controllability,"path-error, v=0.0, kappa=0.0",1,2,0.0,ZOH discretisation
+controllability,"path-error, v=0.05, kappa=0.0",2,2,1.4142128552664444e-05,ZOH discretisation
+controllability,"path-error, v=0.2, kappa=0.0",2,2,5.6568089950210906e-05,ZOH discretisation
+controllability,"path-error, v=0.2, kappa=0.5",2,2,5.6568184230097816e-05,ZOH discretisation
+observability,"none (odometry only), 1 marker(s), pose",0,3,0.0,known map
+observability,"none (odometry only), 1 marker(s), bias",0,6,0.0,known map
+observability,"none (odometry only), 2 marker(s), pose",0,3,0.0,known map
+observability,"none (odometry only), 2 marker(s), bias",0,6,0.0,known map
+observability,"bearing, 1 marker(s), pose",2,3,1.6226173846733895e-17,known map
+observability,"bearing, 1 marker(s), bias",4,6,1.952353879828117e-18,known map
+observability,"bearing, 2 marker(s), pose",3,3,0.014916208468477066,known map
+observability,"bearing, 2 marker(s), bias",6,6,0.012042528449196649,known map
+observability,"range + bearing, 1 marker(s), pose",2,3,3.812261745343005e-17,known map
+observability,"range + bearing, 1 marker(s), bias",5,6,2.2469440765894678e-17,known map
+observability,"range + bearing, 2 marker(s), pose",3,3,0.14075845507243276,known map
+observability,"range + bearing, 2 marker(s), bias",6,6,0.06580360137192698,known map
+observability,"range + bearing + normal, 1 marker(s), pose",3,3,0.04905867365570636,known map
+observability,"range + bearing + normal, 1 marker(s), bias",6,6,0.04774939904411788,known map
+observability,"range + bearing + normal, 2 marker(s), pose",3,3,0.1753190791392183,known map
+observability,"range + bearing + normal, 2 marker(s), bias",6,6,0.07212826516085379,known map
+slam gauge,"1 landmarks, free",6,9,3.0,gauge = global translation and rotation
+slam gauge,"1 landmarks, anchored",9,9,0.0,gauge = global translation and rotation
+slam gauge,"2 landmarks, free",9,12,3.0,gauge = global translation and rotation
+slam gauge,"2 landmarks, anchored",12,12,0.0,gauge = global translation and rotation
+blind growth,"5 m straight, no marker",0,3,0.39333003529687294,1-sigma position [m]

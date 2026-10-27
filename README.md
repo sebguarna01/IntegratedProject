@@ -1,10 +1,9 @@
 # Active Visual Navigation and Autonomous Docking
-### MuJoCo TurtleBot3 with a Pan-Tilt RGB Camera
 
 Camera-only navigation and docking for a small mobile robot in MuJoCo, using a TurtleBot3 base with an actively controlled pan-tilt camera head.
 
-**Course:** 41014 / 42043 Sensors and Control in Mechatronics Systems, Integrated Project
-**Track:** Own project (Track A with extension)
+**Course:** 41014 / 42043 Sensors and Control in Mechatronics Systems, Assessment 4 (Integrated Project)
+**Track:** Own project (Track A extension)
 **Team:** Team 10
 **Demo video:** TBC
 
@@ -14,7 +13,7 @@ Camera-only navigation and docking for a small mobile robot in MuJoCo, using a T
 
 ## 1. Overview
 
-This project is a simulation-first prototype of the navigation and perception system for MOXI, a proposed small non-humanoid companion robot that communicates through movement, gaze and sound rather than speech or screens.
+This project investigates how far a small mobile robot can navigate and dock using minimal sensing: wheel-encoder odometry and an actively controlled pan-tilt camera.
 
 The robot has **no LiDAR**. It uses only wheel-encoder odometry and a pan-tilt RGB camera. It must cross a rectangular room, avoid static and moving obstacles, build a map as it goes, and dock at an ArUco-marked charging station at the far end.
 
@@ -41,7 +40,7 @@ The camera head is not passive. A small behaviour layer (Curious, Attentive, Cau
 
 ## 3. Model and frames
 
-- State-space model: differential-drive model. Derivation: TBC (`docs/`)
+- State-space model: differential-drive (unicycle) model. Derivation: TBC (`docs/`)
 - Frame chain: World, Base, Pan, Tilt, Camera, Marker. Frame diagram: TBC (`docs/`)
 - Controllability and observability analysis: TBC (`docs/`)
 
@@ -56,16 +55,15 @@ Parameter values and justification will be added here once tuned.
 | Gating threshold | TBC | TBC |
 | LQR weights | TBC | TBC |
 | Velocity limits | TBC | TBC |
-| Camera intrinsics | TBC | Calibration, TBC |
+| Camera intrinsics | fx = fy = 415.5 px, cx = 319.9, cy = 238.7 (640 x 480), distortion about zero | Checkerboard calibration in simulation, `scripts/calibrate_camera.py`; reprojection RMS 0.09 px |
 
 ## 5. Experiments
 
-TBC... Proposed:
 Three sensing configurations are compared over randomised trials:
 
 | Config | Localisation | Camera head |
 |---|---|---|
-| A | Odometry only | Fixed |
+| A | Odometry only (dead reckoning) | Fixed |
 | B | EKF with marker updates | Fixed |
 | C | EKF with marker updates | Active (behaviour-driven) |
 
@@ -73,7 +71,7 @@ Scenarios increase in difficulty: static obstacles, unknown obstacles with onlin
 
 ## 6. Results
 
-All results are TBC. Sample results breakdown/analysis below
+All results are TBC.
 
 | Metric | A | B | C |
 |---|---|---|---|
@@ -88,45 +86,78 @@ Failure analysis: TBC.
 
 ## 7. Installation
 
- TBC.
+Developed on macOS (Apple silicon). Python version: TBC.
+
+```bash
+git clone <this repository> active-visual-navigation   # URL: TBC
+cd active-visual-navigation
+
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+pip install -e .                                 # makes `import activenav` work
+```
+
+Copy the Waffle Pi mesh files (`waffle_pi_base.stl`, `left_tire.stl`, `right_tire.stl`) from the
+`assets/` folder of the TurtleBot3 model in
+[robotis_mujoco_menagerie](https://github.com/ROBOTIS-GIT/robotis_mujoco_menagerie)
+into `models/assets/`. The robot, head and room are defined in `models/docking_scene.xml`.
+
+On macOS, the interactive MuJoCo viewer must be launched with `mjpython` instead of `python`.
+
+Editor: Visual Studio Code. After creating `.venv`, select it as the Python interpreter (Command Palette, "Python: Select Interpreter"). Further VS Code setup (debug configurations, recommended extensions): TBC.
 
 ## 8. Running the code
 
-Commands are TBC.
+Current scripts (details in `docs/methods.md`):
+
+```bash
+python scripts/odometry_baseline.py square|study|crossing   # odometry-only baselines
+python scripts/characterise_markers.py                      # marker measurement error vs range and view angle
+python scripts/ekf_crossing.py                              # known-map EKF check (consistency, bias states)
+python scripts/search_study.py --sensor camera --level large_room --trials 20   # one study
+SENSOR=camera JOBS=4 bash scripts/run_studies.sh   # the whole final study: all levels, dock heights, held-out seeds, tilt-free B, Q/R sensitivity (one 300 s cap)
+python scripts/watch_search.py                              # live viewer
+pytest                                                      # unit tests
+```
+
+```bash
+python scripts/model_analysis.py                           # controllability and observability
+python scripts/calibrate_camera.py                         # checkerboard calibration and frame-chain check (needs GL)
+```
+
+LQR vs go-to-point tracking comparison: `scripts/lqr_tracking.py` (results in docs/methods.md).
 
 ## 9. Repository structure
 
-Planned layout (TBC):
-
 ```
-configs/        parameters and scenario definitions
-models/         MuJoCo additions: head, room, markers
-src/
-  sim/          MuJoCo wrapper
-  sensing/      odometry, calibration, head kinematics
-  perception/   ArUco detection, obstacle detection
-  mapping/      occupancy grid
-  planning/     A* and path smoothing
-  control/      LQR, pan-tilt control
-  behaviour/    state machine, gaze selection
-  analysis/     controllability and observability checks
-  evaluation/   metrics and plots (only place ground truth is used)
+configs/        parameters, worlds and levels
+models/         MuJoCo robot template, base scene, assets (room XML is generated)
+src/activenav/
+  sim/          MuJoCo wrapper, world and scene builder, walking people
+  sensing/      odometry, camera and head kinematics, ArUco markers, floor ranging
+  estimation/   EKF and EKF-SLAM
+  control/      go-to-point, lqr (path tracker)
+  autonomy/     search-and-dock agent, exploration, gaze, occupancy map, planner
+  evaluation/   trials, search study, paired statistics, plots, viewer (only place ground truth is used)
 scripts/        run and experiment scripts
 tests/
-docs/           derivations, frame diagram, figures
-results/        summary tables and figures
+docs/           methods and metrics
+results/        final tables and figures
 ```
 
 ## 10. Contributions
 
 | Member | Contribution |
 |---|---|
-| Sebastiano Guarna | TBC |
-| Dorian Veloso | TBC |
+| TBC | TBC |
+| TBC | TBC |
 
 ## 11. Generative AI declaration
 
- TBC
+Tools used: TBC
+Purpose: TBC
+What was checked or changed by the team: TBC
 
 ## 12. Acknowledgements and references
 
@@ -134,3 +165,6 @@ results/        summary tables and figures
 - MuJoCo physics engine
 - Code adapted from weekly tutorials, MuJoCo examples and the Robotics Toolbox: TBC (list specific files)
 
+## 13. Licence
+
+TBC

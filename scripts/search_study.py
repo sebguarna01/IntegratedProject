@@ -2,24 +2,21 @@
 
     python scripts/search_study.py --sensor synthetic --trials 30 --level large_6_pillars --random-markers --random-dock
     python scripts/search_study.py --sensor camera --trials 20            # real rendered camera + floor ranging
-    python scripts/search_study.py --report --sensor synthetic            # tables from the CSV
+    python scripts/analyse.py                                             # every table and figure, from the CSVs
 
 Configs: B (fixed head), C-sweep (sweeping head), C-info (active gaze). A is not run: odometry alone cannot see
 marker 10 or the walls, so it cannot search. Each seed fixes the start pose (random, clear of obstacles), the
 hidden encoder errors and, with --random-markers / --random-dock, the marker layout, so every config faces the
 same trial. The robot knows no map; ground truth is used only to score (docked = true position within 0.10 m of
-the dock point and heading within 5 deg, no contact). Results append to results/search_study_<sensor>.csv and
+the dock point and heading within 5 deg, no contact). Results append to results/search_study_<sensor>.csv (--dir and --tag choose the file) and
 finished rows are skipped, so an interrupted run resumes.
 """
 import argparse
 import csv
 
-import numpy as np
-
 from activenav.config import apply_overrides, load_config
 from activenav.evaluation.worlds import ScenarioError
 from activenav.evaluation.search import SEARCH_CONFIGS, make_search_session
-from activenav.evaluation.stats import bootstrap_ci, wilson_interval
 
 FIELDS = ["level", "layout", "config", "seed", "outcome", "docked", "duration_s", "time_to_first_sight_s", "path_length_m",
           "miss_m", "yaw_err_deg", "min_clearance_m", "pos_rmse_m", "n_landmarks", "landmark_err_m", "coverage", "map_precision",
@@ -116,197 +113,6 @@ def run(args, cfg):
         ctx.env.close()
 
 
-def _col(rs, k):
-    """Numeric column as floats; rows from older files (no such column) or 'nan' give nan."""
-    out = []
-    for r in rs:
-        try:
-            out.append(float(r.get(k, "nan") or "nan"))
-        except ValueError:
-            out.append(float("nan"))
-    return np.array(out, float)
-
-
-def extra_report(sel, per):
-    """Secondary metrics (medians over every run of a config), success over time, and success by dock-marker height."""
-    cfgs = [c for c in SEARCH_CONFIGS if c in per]
-    rows = {c: list(per[c].values()) for c in cfgs}
-    if not any(np.isfinite(_col(rows[c], "nees_mean")).any() for c in cfgs):
-        return                                                    # files from before these metrics existed
-    cols = [("nees_mean", "NEES (ideal 3)"), ("nees_consistent", "NEES in band"), ("sigma_xy_mean_m", "sigma xy [m]"),
-            ("final_pos_err_m", "final pos err"), ("coverage_60s", "cov@60s"), ("approach_s", "approach s"),
-            ("dock_seen_frac", "dock seen"), ("head_pan_travel_rad", "pan travel"), ("head_tilt_travel_rad", "tilt travel"),
-            ("near_time_s", "near obst s"), ("blocked_s", "blocked s"), ("n_recover", "recoveries"), ("n_replans", "replans")]
-    print("  secondary metrics (median over all runs of the config; nan runs ignored):")
-    print("  " + f"{'config':8s}" + "".join(f"{h:>15s}" for _, h in cols))
-    for c in cfgs:
-        print("  " + f"{c:8s}" + "".join(f"{np.nanmedian(_col(rows[c], k)) if np.isfinite(_col(rows[c], k)).any() else float('nan'):15.3f}" for k, _ in cols))
-    # success over time: a failure is never counted as 'slow', it simply has not succeeded by that time
-    print("  docked within:   " + "   ".join(f"{c}: " + " ".join(
-        f"{int(sum(r['docked'] == '1' and float(r['duration_s']) <= T for r in rows[c]))}/{len(rows[c])}@{T}s" for T in (60, 100, 150))
-        for c in cfgs))
-    hs = sorted({h for c in cfgs for h in _col(rows[c], "dock_height_m") if np.isfinite(h)})
-    if len(hs) > 1:
-        print("  docking success by dock-marker height:")
-        print("  " + f"{'height m':>9s}" + "".join(f"{c:>16s}" for c in cfgs))
-        for h in hs:
-            cells = []
-            for c in cfgs:
-                sub = [r for r in rows[c] if abs(float(r.get("dock_height_m") or "nan") - h) < 1e-6]
-                k = sum(r["docked"] == "1" for r in sub)
-                cells.append(f"{k}/{len(sub)} ({100 * k / max(1, len(sub)):.0f}%)")
-            print("  " + f"{h:9.2f}" + "".join(f"{x:>16s}" for x in cells))
-
-
-def load_rows(args, cfg):
-    """Every results file of this sensor (tagged runs included). A seed that appears in several files counts once: newest wins."""
-    latest = {}
-    files = sorted(rdir(args, cfg).glob(f"search_study_{args.sensor}*.csv"), key=lambda p: p.stat().st_mtime)
-    for path in files:
-        if "pre_sweepfix" not in path.name:
-            from activenav.evaluation.stats import read_rows
-            for r in read_rows(path, FIELDS)[0]:
-                latest[(r["level"], r["layout"], r["config"], int(r["seed"]))] = r
-    from activenav.evaluation.stats import apply_cap
-    rows = apply_cap(list(latest.values()), getattr(args, "cap", None))
-    if getattr(args, "cap", None):
-        print(f"(analysis cap {args.cap:g} s: runs longer than that count as timeouts)")
-    return rows
-
-
-def plots(args, cfg):
-    from activenav.evaluation.study_plots import make_all
-    rows = load_rows(args, cfg)
-    if not rows:
-        raise SystemExit("no results to plot")
-    out = rdir(args, cfg) / "figures" / f"study_{args.sensor}"
-    for p in make_all(rows, out, getattr(args, "view", "both")):
-        print("saved", p)
-
-
-def summary_report(rows):
-    """The high-level text view: one table per room (every layout and dock height pooled), then success for low and high dock markers."""
-    print("\n##### SUMMARY: one block per room, every layout and dock height pooled #####")
-    for lvl in dict.fromkeys(r["level"] for r in rows):
-        sel = [r for r in rows if r["level"] == lvl]
-        print(f"\n=== {lvl}  ({len(sel)} trials) ===")
-        print(f"{'config':8s} {'n':>4s} {'docked (Wilson 95%)':>22s} {'false':>6s} {'contact':>8s} {'timeout/gave up':>16s} {'t_dock med':>11s} "
-              f"{'NEES in band':>13s} {'final err':>10s} {'min clr':>8s} {'near s':>7s}")
-        for c in SEARCH_CONFIGS:
-            rs = [r for r in sel if r["config"] == c]
-            if not rs:
-                continue
-            ok = [r for r in rs if r["docked"] == "1"]
-            lo, hi = wilson_interval(len(ok), len(rs))
-            td = np.array([float(r["duration_s"]) for r in ok]) if ok else np.array([np.nan])
-            med = lambda k: np.nanmedian(_col(rs, k)) if np.isfinite(_col(rs, k)).any() else float("nan")
-            print(f"{c:8s} {len(rs):4d} {len(ok):3d}/{len(rs):<4d} ({lo:.2f}-{hi:.2f}) {sum(r['outcome'] == 'false dock' for r in rs):6d} "
-                  f"{sum(r['outcome'] == 'contact' for r in rs):8d} {sum(r['outcome'] in ('timeout', 'gave up') for r in rs):16d} "
-                  f"{np.median(td):11.0f} {med('nees_consistent'):13.2f} {med('final_pos_err_m'):10.3f} {med('min_clearance_m'):+8.2f} {med('near_time_s'):7.1f}")
-    hs = _col(rows, "dock_height_m")
-    from activenav.evaluation import paired
-    bands = [(label, f) for _, label, f in paired.BANDS if any(np.isfinite(h) and f(h) for h in hs)]
-    if len(bands) >= 2:
-        print("\n##### docking success by room and dock-marker height band #####")
-        print(f"{'room':18s} {'band':>32s}" + "".join(f"{c:>16s}" for c in SEARCH_CONFIGS))
-        for lvl in dict.fromkeys(r["level"] for r in rows):
-            for name, f in bands:
-                cells = []
-                for c in SEARCH_CONFIGS:
-                    sub = [r for r in rows if r["level"] == lvl and r["config"] == c and np.isfinite(float(r.get("dock_height_m") or "nan"))
-                           and f(float(r["dock_height_m"]))]
-                    k = sum(r["docked"] == "1" for r in sub)
-                    cells.append(f"{k}/{len(sub)} ({100 * k / len(sub):.0f}%)" if sub else "-")
-                if any(x != "-" for x in cells):
-                    print(f"{lvl:18s} {name:>32s}" + "".join(f"{x:>16s}" for x in cells))
-
-
-def report(args, cfg):
-    rows = load_rows(args, cfg)
-    view = getattr(args, "view", "both")
-    if view in ("summary", "both"):
-        summary_report(rows)
-        if view == "summary":
-            height_report(rows)
-            paired_report(rows, "room")
-            return
-    height_report_rows = rows
-    num = lambda r, k: float(r[k])
-    groups = list(dict.fromkeys((r["level"], r["layout"]) for r in rows))
-    for lvl, lay in groups:
-        sel = [r for r in rows if r["level"] == lvl and r["layout"] == lay]
-        print(f"\n=== {lvl}, markers {lay}, sensor {args.sensor} ===")
-        print(f"{'config':8s} {'n':>3s} {'docked (Wilson 95%)':>22s} {'contact':>8s} {'timeout/gave up':>16s} {'t_dock med [CI]':>20s} "
-              f"{'p90':>6s} {'t_first med':>11s} {'path':>6s} {'min clr':>8s} {'coverage':>9s} {'lm err':>7s}")
-        per = {}
-        for c in SEARCH_CONFIGS:
-            rs = sorted([r for r in sel if r["config"] == c], key=lambda r: int(r["seed"]))
-            if not rs:
-                continue
-            per[c] = {int(r["seed"]): r for r in rs}
-            ok = [r for r in rs if r["docked"] == "1"]
-            lo, hi = wilson_interval(len(ok), len(rs))
-            td = np.array([num(r, "duration_s") for r in ok]) if ok else np.array([np.nan])
-            ci = bootstrap_ci(td) if len(ok) > 2 else (float("nan"),) * 2
-            tf = np.array([num(r, "time_to_first_sight_s") for r in rs])
-            print(f"{c:8s} {len(rs):3d} {len(ok):3d}/{len(rs):<3d} ({lo:.2f}-{hi:.2f}) {sum(r['outcome'] == 'contact' for r in rs):8d} "
-                  f"{sum(r['outcome'] in ('timeout', 'gave up') for r in rs):16d} {np.median(td):8.0f} [{ci[0]:.0f}-{ci[1]:.0f}]"
-                  f" {np.nanpercentile(td, 90):6.0f} {np.nanmedian(tf):11.1f} {np.median([num(r, 'path_length_m') for r in rs]):6.1f} "
-                  f"{np.median([num(r, 'min_clearance_m') for r in rs]):+8.2f} {np.median([num(r, 'coverage') for r in rs]):9.2f} "
-                  f"{np.nanmedian([num(r, 'landmark_err_m') for r in rs]):7.3f}")
-        extra_report(sel, per)
-        try:
-            from scipy.stats import fisher_exact, wilcoxon
-        except ImportError:
-            continue
-        for a, b in (("B", "C-info"), ("B", "C-sweep"), ("C-sweep", "C-info")):
-            if a in per and b in per:
-                seeds = sorted(set(per[a]) & set(per[b]))
-                ta = np.array([num(per[a][s], "duration_s") for s in seeds])
-                tb = np.array([num(per[b][s], "duration_s") for s in seeds])
-                fa = sum(per[a][s]["docked"] != "1" for s in seeds)
-                fb = sum(per[b][s]["docked"] != "1" for s in seeds)
-                try:
-                    pw = wilcoxon(ta, tb).pvalue if np.any(ta != tb) else 1.0
-                except ValueError:
-                    pw = float("nan")
-                pf = fisher_exact([[fa, len(seeds) - fa], [fb, len(seeds) - fb]])[1]
-                print(f"  {a} vs {b}: paired time to finish (failures count as the run length) {np.median(ta):.0f} vs {np.median(tb):.0f} s (Wilcoxon p={pw:.3f}); "
-                      f"failures {fa} vs {fb} (Fisher p={pf:.3f})   [n={len(seeds)} seeds]")
-
-    height_report(height_report_rows)
-    paired_report(height_report_rows, "room")
-    paired_report(height_report_rows, "band")
-
-
-def paired_report(rows, by="room"):
-    """Paired comparison of the configs, seed by seed (evaluation/paired.py): wins/losses, success difference with a CI over seeds."""
-    from activenav.evaluation import paired
-    if not any(paired.pairs(rows, a, b) for a, b in paired.COMPARISONS):
-        return
-    what = "room" if by == "room" else "room and dock-height band"
-    print(f"\n##### PAIRED COMPARISON by {what}: the same seed and layout under two configs (A - B, 95% CI over seeds) #####")
-    print(paired.format_report(rows, by))
-
-
-def height_report(rows):
-    """Success by dock-marker height for each level, pooling every layout (a --dock-height sweep has one layout per height)."""
-    for lvl in dict.fromkeys(r["level"] for r in rows):
-        sel = [r for r in rows if r["level"] == lvl]
-        hs = sorted({h for h in _col(sel, "dock_height_m") if np.isfinite(h)})
-        if len(hs) < 2:
-            continue
-        print(f"\n=== {lvl}: docking success by dock-marker height (all layouts pooled) ===")
-        print(f"{'height m':>9s}" + "".join(f"{c:>18s}" for c in SEARCH_CONFIGS))
-        for h in hs:
-            cells = []
-            for c in SEARCH_CONFIGS:
-                sub = [r for r in sel if r["config"] == c and abs(float(r.get("dock_height_m") or "nan") - h) < 1e-6]
-                k = sum(r["docked"] == "1" for r in sub)
-                cells.append(f"{k}/{len(sub)} ({100 * k / max(1, len(sub)):.0f}%)")
-            print(f"{h:9.2f}" + "".join(f"{x:>18s}" for x in cells))
-
-
 def main():
     cfg = load_config()
     ap = argparse.ArgumentParser()
@@ -324,16 +130,7 @@ def main():
     ap.add_argument("--start", nargs=3, type=float, default=None, metavar=("X", "Y", "YAW"), help="fixed start pose (default: random per seed)")
     ap.add_argument("--max-time", type=float, default=None)
     ap.add_argument("--redo", action="store_true", help="delete the existing rows of this exact command (level, configs, dock heights, seeds) first, then run them again")
-    ap.add_argument("--cap", type=float, default=None, metavar="SECONDS",
-                    help="with --report/--plots: analyse every run as if capped at this many seconds (a longer run counts as a timeout), so rooms run with "
-                         "different --max-time stay comparable; it can only shorten runs")
     ap.add_argument("--repair", action="store_true", help="bring every results file of this sensor up to date (current header, damaged rows dropped; originals kept as .bak) and exit")
-    ap.add_argument("--report", action="store_true", help="print the tables and also write the charts (results/figures/study_<sensor>/)")
-    ap.add_argument("--plots", action="store_true", help="only write the charts")
-    ap.add_argument("--no-plots", action="store_true", help="with --report: tables only")
-    ap.add_argument("--view", choices=["summary", "detail", "both"], default="both",
-                    help="with --report/--plots: 'summary' = one block/figure set per room (pooled), 'detail' = per layout and per dock height, "
-                         "'both' (default) = summary first, then the detail")
     ap.add_argument("--dir", default="results", help="results folder, relative to the project root (e.g. results/heldout, results/sensitivity_q2)")
     ap.add_argument("--set", nargs="*", default=[], metavar="KEY=VALUE")
     args = ap.parse_args()
@@ -344,13 +141,7 @@ def main():
             kept, dropped = repair(path, FIELDS)
             print(f"{path.name}: {kept} rows kept, {dropped} damaged row(s) dropped (original: {path.name}.bak)")
         return
-    if args.report or args.plots:
-        if args.report:
-            report(args, cfg)
-        if args.plots or not args.no_plots:
-            plots(args, cfg)
-    else:
-        run(args, cfg)
+    run(args, cfg)
 
 
 if __name__ == "__main__":
