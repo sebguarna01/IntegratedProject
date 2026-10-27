@@ -2,15 +2,15 @@
 
 Common cap 300 s: a longer run counts as a timeout. Intervals: Wilson (proportions), bootstrap over seeds (paired differences).
 
-Rooms block: 1440 trials (240 development and 240 held-out trials per config). Height block: 880 trials over dock heights 0.2, 0.25, 0.3, 0.35, 0.45, 0.6, 0.9 m.
+Rooms block: 2160 trials (360 development and 360 held-out trials per config). Height block: 880 trials over dock heights 0.2, 0.25, 0.3, 0.35, 0.45, 0.6, 0.9 m.
 
 ## 1. Pooled scorecard (box: 25-75th percentile, line: median, whisker: 10-90th)
 
 | scope | config | n | docked | median time to dock [s] | median pos RMSE [mm] | NEES in 95% band | median closest approach [m] | contacts |
 |---|---|---|---|---|---|---|---|---|
-| Rooms at standard marker heights | B | 480 | 473/480 (99%) | 74 | 19.5 | 0.89 | 0.21 | 0 |
-| Rooms at standard marker heights | C-sweep | 480 | 476/480 (99%) | 67 | 11.8 | 0.80 | 0.24 | 1 |
-| Rooms at standard marker heights | C-info | 480 | 471/480 (98%) | 72 | 12.2 | 0.80 | 0.24 | 4 |
+| Rooms at standard marker heights | B | 720 | 712/720 (99%) | 69 | 17.9 | 0.90 | 0.21 | 0 |
+| Rooms at standard marker heights | C-sweep | 720 | 713/720 (99%) | 65 | 11.2 | 0.80 | 0.24 | 1 |
+| Rooms at standard marker heights | C-info | 720 | 708/720 (98%) | 67 | 11.5 | 0.80 | 0.25 | 6 |
 | All dock heights pooled | B | 280 | 133/280 (48%) | 56 | 15.6 | 0.92 | 0.14 | 0 |
 | All dock heights pooled | C-sweep | 280 | 165/280 (59%) | 54 | 7.8 | 0.85 | 0.18 | 0 |
 | All dock heights pooled | C-info | 320 | 297/320 (93%) | 56 | 10.2 | 0.80 | 0.14 | 1 |
@@ -33,88 +33,88 @@ Seeds: development 0..19, held-out 5000..5019 (both at every height), 6000..6039
 
 | room | B | C-sweep | C-info |
 |---|---|---|---|
-| alcove | 40/40 (100%); 11.2 mm; 66 s | 40/40 (100%); 6.9 mm; 59 s | 40/40 (100%); 9.1 mm; 65 s |
-| cluttered_14 | 38/40 (95%); 66.8 mm; 129 s | 39/40 (98%); 45.5 mm; 124 s | 37/40 (92%); 50.5 mm; 126 s |
-| corridor | 40/40 (100%); 31.4 mm; 80 s | 39/40 (98%); 18.6 mm; 75 s | 40/40 (100%); 23.4 mm; 93 s |
-| l_room | 40/40 (100%); 22.9 mm; 83 s | 40/40 (100%); 12.8 mm; 72 s | 40/40 (100%); 12.9 mm; 84 s |
-| large_6_pillars | 39/40 (98%); 14.2 mm; 55 s | 40/40 (100%); 7.3 mm; 54 s | 40/40 (100%); 10.2 mm; 55 s |
-| large_9_pillars | 40/40 (100%); 26.4 mm; 90 s | 40/40 (100%); 21.1 mm; 86 s | 40/40 (100%); 17.5 mm; 73 s |
-| large_room | 40/40 (100%); 15.5 mm; 56 s | 40/40 (100%); 7.4 mm; 57 s | 40/40 (100%); 7.5 mm; 56 s |
-| people_constant | 40/40 (100%); 12.5 mm; 78 s | 40/40 (100%); 10.4 mm; 72 s | 39/40 (98%); 7.2 mm; 88 s |
-| people_random | 40/40 (100%); 13.1 mm; 76 s | 40/40 (100%); 9.1 mm; 73 s | 39/40 (98%); 7.6 mm; 74 s |
-| sparse_noisy_odom | 38/40 (95%); 53.1 mm; 56 s | 38/40 (95%); 25.2 mm; 54 s | 37/40 (92%); 37.9 mm; 56 s |
-| two_rooms | 38/40 (95%); 17.9 mm; 69 s | 40/40 (100%); 10.2 mm; 66 s | 39/40 (98%); 12.4 mm; 72 s |
-| zigzag | 40/40 (100%); 22.8 mm; 95 s | 40/40 (100%); 10.8 mm; 95 s | 40/40 (100%); 16.2 mm; 94 s |
-| ALL | 473/480 (99%); 19.5 mm; 74 s | 476/480 (99%); 11.8 mm; 67 s | 471/480 (98%); 12.2 mm; 72 s |
+| alcove | 60/60 (100%); 10.6 mm; 64 s | 60/60 (100%); 6.8 mm; 57 s | 60/60 (100%); 7.8 mm; 65 s |
+| cluttered_14 | 57/60 (95%); 71.2 mm; 136 s | 58/60 (97%); 54.9 mm; 128 s | 56/60 (93%); 49.3 mm; 124 s |
+| corridor | 60/60 (100%); 31.4 mm; 70 s | 58/60 (97%); 18.6 mm; 73 s | 60/60 (100%); 22.6 mm; 79 s |
+| l_room | 60/60 (100%); 22.2 mm; 77 s | 60/60 (100%); 14.2 mm; 68 s | 60/60 (100%); 12.2 mm; 79 s |
+| large_6_pillars | 59/60 (98%); 13.6 mm; 55 s | 59/60 (98%); 7.2 mm; 54 s | 59/60 (98%); 9.7 mm; 55 s |
+| large_9_pillars | 60/60 (100%); 26.0 mm; 79 s | 60/60 (100%); 20.5 mm; 79 s | 60/60 (100%); 16.9 mm; 72 s |
+| large_room | 60/60 (100%); 12.2 mm; 54 s | 60/60 (100%); 7.2 mm; 56 s | 60/60 (100%); 7.2 mm; 55 s |
+| people_constant | 60/60 (100%); 12.3 mm; 76 s | 60/60 (100%); 9.6 mm; 72 s | 59/60 (98%); 6.9 mm; 75 s |
+| people_random | 60/60 (100%); 12.2 mm; 75 s | 60/60 (100%); 7.7 mm; 73 s | 59/60 (98%); 7.8 mm; 72 s |
+| sparse_noisy_odom | 58/60 (97%); 44.8 mm; 56 s | 58/60 (97%); 25.2 mm; 54 s | 56/60 (93%); 34.8 mm; 55 s |
+| two_rooms | 58/60 (97%); 13.8 mm; 63 s | 60/60 (100%); 8.9 mm; 62 s | 59/60 (98%); 10.8 mm; 66 s |
+| zigzag | 60/60 (100%); 19.2 mm; 94 s | 60/60 (100%); 10.7 mm; 94 s | 60/60 (100%); 11.9 mm; 81 s |
+| ALL | 712/720 (99%); 17.9 mm; 69 s | 713/720 (99%); 11.2 mm; 65 s | 708/720 (98%); 11.5 mm; 67 s |
 
 ## 4. Paired position-RMSE difference by room [mm, median [95% CI over seeds]] (first minus second; negative = first better)
 
 | room | pair | seeds | RMSE difference |
 |---|---|---|---|
-| alcove | C-info - B | 40 | -2.0 [-5.5, +0.2] |
-| cluttered_14 | C-info - B | 40 | -0.9 [-27.2, +10.9] |
-| corridor | C-info - B | 40 | -7.2 [-13.1, -0.7] |
-| l_room | C-info - B | 40 | -4.6 [-11.3, +1.4] |
-| large_6_pillars | C-info - B | 40 | -2.8 [-5.4, +0.7] |
-| large_9_pillars | C-info - B | 40 | -7.4 [-19.1, -1.6] |
-| large_room | C-info - B | 40 | -3.9 [-8.4, -0.3] |
-| people_constant | C-info - B | 40 | -2.4 [-7.2, -0.3] |
-| people_random | C-info - B | 40 | -0.9 [-3.8, +1.4] |
-| sparse_noisy_odom | C-info - B | 40 | -16.6 [-31.9, -6.6] |
-| two_rooms | C-info - B | 40 | -0.2 [-4.2, +1.4] |
-| zigzag | C-info - B | 40 | -9.3 [-13.5, -0.6] |
-| ALL ROOMS | C-info - B | 480 | -3.8 [-5.2, -2.1] |
-| alcove | C-sweep - B | 40 | -3.5 [-5.6, -1.5] |
-| cluttered_14 | C-sweep - B | 40 | -13.9 [-38.8, +0.1] |
-| corridor | C-sweep - B | 40 | -12.9 [-17.8, -5.8] |
-| l_room | C-sweep - B | 40 | -7.9 [-12.9, -2.5] |
-| large_6_pillars | C-sweep - B | 40 | -4.0 [-7.4, -2.3] |
-| large_9_pillars | C-sweep - B | 40 | -3.3 [-10.0, -0.4] |
-| large_room | C-sweep - B | 40 | -6.9 [-11.7, -0.3] |
-| people_constant | C-sweep - B | 40 | -1.1 [-4.6, +0.7] |
-| people_random | C-sweep - B | 40 | -2.2 [-4.7, +0.1] |
-| sparse_noisy_odom | C-sweep - B | 40 | -16.1 [-33.5, -2.2] |
-| two_rooms | C-sweep - B | 40 | -0.6 [-6.7, +0.9] |
-| zigzag | C-sweep - B | 40 | -10.8 [-23.4, -3.4] |
-| ALL ROOMS | C-sweep - B | 480 | -4.8 [-6.3, -3.3] |
-| alcove | C-info - C-sweep | 40 | +0.4 [-0.4, +3.0] |
-| cluttered_14 | C-info - C-sweep | 40 | +4.9 [-2.8, +24.0] |
-| corridor | C-info - C-sweep | 40 | +0.9 [-0.2, +6.6] |
-| l_room | C-info - C-sweep | 40 | +0.2 [-1.1, +6.6] |
-| large_6_pillars | C-info - C-sweep | 40 | +1.2 [+0.2, +2.9] |
-| large_9_pillars | C-info - C-sweep | 40 | -0.1 [-3.2, +2.2] |
-| large_room | C-info - C-sweep | 40 | -0.0 [-1.5, +1.1] |
-| people_constant | C-info - C-sweep | 40 | -0.2 [-2.8, +0.1] |
-| people_random | C-info - C-sweep | 40 | -0.0 [-2.1, +1.3] |
-| sparse_noisy_odom | C-info - C-sweep | 40 | +0.1 [-1.4, +1.9] |
-| two_rooms | C-info - C-sweep | 40 | +1.4 [+0.0, +5.3] |
-| zigzag | C-info - C-sweep | 40 | +1.1 [-0.4, +4.2] |
-| ALL ROOMS | C-info - C-sweep | 480 | +0.3 [+0.0, +0.8] |
+| alcove | C-info - B | 60 | -2.8 [-5.3, -0.8] |
+| cluttered_14 | C-info - B | 60 | -4.1 [-35.7, +2.7] |
+| corridor | C-info - B | 60 | -7.2 [-11.7, -1.0] |
+| l_room | C-info - B | 60 | -3.1 [-10.2, +0.2] |
+| large_6_pillars | C-info - B | 60 | -1.4 [-3.6, +0.5] |
+| large_9_pillars | C-info - B | 60 | -6.3 [-15.5, -1.4] |
+| large_room | C-info - B | 60 | -2.5 [-6.3, -0.3] |
+| people_constant | C-info - B | 60 | -2.1 [-6.0, -0.2] |
+| people_random | C-info - B | 60 | -1.4 [-3.2, +0.5] |
+| sparse_noisy_odom | C-info - B | 60 | -14.2 [-28.7, -7.0] |
+| two_rooms | C-info - B | 60 | +0.4 [-3.3, +1.4] |
+| zigzag | C-info - B | 60 | -3.4 [-9.7, -0.3] |
+| ALL ROOMS | C-info - B | 720 | -2.9 [-4.2, -1.9] |
+| alcove | C-sweep - B | 60 | -3.2 [-4.2, -1.9] |
+| cluttered_14 | C-sweep - B | 60 | -8.1 [-31.9, -0.0] |
+| corridor | C-sweep - B | 60 | -12.0 [-16.3, -4.3] |
+| l_room | C-sweep - B | 60 | -6.2 [-11.1, -0.3] |
+| large_6_pillars | C-sweep - B | 60 | -2.6 [-4.8, -1.9] |
+| large_9_pillars | C-sweep - B | 60 | -2.8 [-7.0, +0.1] |
+| large_room | C-sweep - B | 60 | -2.7 [-8.9, -0.3] |
+| people_constant | C-sweep - B | 60 | -0.9 [-2.3, +0.4] |
+| people_random | C-sweep - B | 60 | -1.7 [-3.3, -0.5] |
+| sparse_noisy_odom | C-sweep - B | 60 | -12.9 [-28.3, -2.9] |
+| two_rooms | C-sweep - B | 60 | -0.9 [-6.2, +0.2] |
+| zigzag | C-sweep - B | 60 | -7.8 [-13.9, -2.7] |
+| ALL ROOMS | C-sweep - B | 720 | -3.3 [-4.3, -2.5] |
+| alcove | C-info - C-sweep | 60 | +0.2 [-0.8, +1.0] |
+| cluttered_14 | C-info - C-sweep | 60 | +0.9 [-5.3, +9.0] |
+| corridor | C-info - C-sweep | 60 | +0.1 [-0.6, +4.6] |
+| l_room | C-info - C-sweep | 60 | -0.0 [-1.1, +1.3] |
+| large_6_pillars | C-info - C-sweep | 60 | +0.7 [+0.0, +2.2] |
+| large_9_pillars | C-info - C-sweep | 60 | +0.1 [-2.2, +2.0] |
+| large_room | C-info - C-sweep | 60 | -0.0 [-0.9, +0.4] |
+| people_constant | C-info - C-sweep | 60 | -0.2 [-1.4, +0.2] |
+| people_random | C-info - C-sweep | 60 | +0.0 [-0.4, +1.2] |
+| sparse_noisy_odom | C-info - C-sweep | 60 | +0.4 [-0.3, +2.3] |
+| two_rooms | C-info - C-sweep | 60 | +1.2 [+0.1, +3.2] |
+| zigzag | C-info - C-sweep | 60 | +0.6 [-0.2, +2.0] |
+| ALL ROOMS | C-info - C-sweep | 720 | +0.2 [+0.0, +0.4] |
 
 Pooled over all 12 rooms:
 
 | pair | metric | seeds | difference [95% CI] |
 |---|---|---|---|
-| C-info - B | docking [pp] | 480 | -0.4 [-1.9, +1.0] (5W 7L, McNemar p=0.77) |
-| C-info - B | time to dock [s] | 466 | +0.0 [-0.5, +0.4] |
-| C-info - B | RMSE [mm] | 480 | -3.8 [-5.2, -2.1] |
-| C-info - B | closest approach [cm] | 480 | +0.2 [+0.0, +0.4] |
-| C-sweep - B | docking [pp] | 480 | +0.6 [-0.2, +1.7] (4W 1L, McNemar p=0.38) |
-| C-sweep - B | time to dock [s] | 472 | -1.6 [-2.3, -1.0] |
-| C-sweep - B | RMSE [mm] | 480 | -4.8 [-6.3, -3.3] |
-| C-sweep - B | closest approach [cm] | 480 | +1.2 [+0.8, +1.4] |
-| C-info - C-sweep | docking [pp] | 480 | -1.0 [-2.3, +0.0] (2W 7L, McNemar p=0.18) |
-| C-info - C-sweep | time to dock [s] | 469 | +0.4 [+0.2, +1.2] |
-| C-info - C-sweep | RMSE [mm] | 480 | +0.3 [+0.0, +0.8] |
-| C-info - C-sweep | closest approach [cm] | 480 | -0.3 [-0.4, -0.1] |
+| C-info - B | docking [pp] | 720 | -0.6 [-1.5, +0.6] (6W 10L, McNemar p=0.45) |
+| C-info - B | time to dock [s] | 702 | +0.0 [-0.3, +0.4] |
+| C-info - B | RMSE [mm] | 720 | -2.9 [-4.2, -1.9] |
+| C-info - B | closest approach [cm] | 720 | +0.4 [+0.2, +0.6] |
+| C-sweep - B | docking [pp] | 720 | +0.1 [-0.7, +1.0] (5W 4L, McNemar p=1.00) |
+| C-sweep - B | time to dock [s] | 708 | -1.2 [-1.8, -0.7] |
+| C-sweep - B | RMSE [mm] | 720 | -3.3 [-4.3, -2.5] |
+| C-sweep - B | closest approach [cm] | 720 | +1.1 [+0.8, +1.3] |
+| C-info - C-sweep | docking [pp] | 720 | -0.7 [-1.7, +0.3] (4W 9L, McNemar p=0.27) |
+| C-info - C-sweep | time to dock [s] | 704 | +0.5 [+0.2, +0.7] |
+| C-info - C-sweep | RMSE [mm] | 720 | +0.2 [+0.0, +0.4] |
+| C-info - C-sweep | closest approach [cm] | 720 | -0.2 [-0.3, -0.1] |
 
 ## 5. How trials ended
 
 | group | config | n | docked | false dock | contact | timeout | gave up |
 |---|---|---|---|---|---|---|---|
-| rooms | B | 480 | 473 | 1 | 0 | 5 | 1 |
-| rooms | C-sweep | 480 | 476 | 0 | 1 | 2 | 1 |
-| rooms | C-info | 480 | 471 | 0 | 4 | 4 | 1 |
+| rooms | B | 720 | 712 | 1 | 0 | 6 | 1 |
+| rooms | C-sweep | 720 | 713 | 0 | 1 | 4 | 2 |
+| rooms | C-info | 720 | 708 | 0 | 6 | 5 | 1 |
 | 0.2 m | B | 80 | 54 | 26 | 0 | 0 | 0 |
 | 0.2 m | C-sweep | 80 | 63 | 17 | 0 | 0 | 0 |
 | 0.2 m | C-info | 80 | 60 | 19 | 1 | 0 | 0 |
@@ -140,7 +140,7 @@ Pooled over all 12 rooms:
 | height | B | C-sweep | C-info |
 |---|---|---|---|
 | 0.2 m | 26/80 | 17/80 | 19/80 |
-| 0.25 m | 2/520 | 0/520 | 0/520 |
+| 0.25 m | 2/760 | 0/760 | 0/760 |
 | 0.3 m | 1/40 | 0/40 | 0/40 |
 | 0.35 m | 0/40 | 12/40 | 0/40 |
 | 0.45 m | 0/40 | 0/40 | 0/40 |
@@ -168,10 +168,10 @@ Pooled over all 12 rooms:
 | run | B | C-info |
 |---|---|---|
 | Q x0.5 | 20/20 (100%); 15.5 mm; NEES 0.94; sigma 18.8 mm | 20/20 (100%); 9.2 mm; NEES 0.80; sigma 11.1 mm |
-| Q x1 | 20/20 (100%); 15.4 mm; NEES 0.95; sigma 20.0 mm | 20/20 (100%); 9.7 mm; NEES 0.79; sigma 12.1 mm |
+| Q x1 | 30/30 (100%); 15.4 mm; NEES 0.94; sigma 20.6 mm | 30/30 (100%); 10.8 mm; NEES 0.78; sigma 13.9 mm |
 | Q x2 | 19/20 (95%); 14.2 mm; NEES 0.93; sigma 24.6 mm | 19/20 (95%); 9.9 mm; NEES 0.79; sigma 11.5 mm |
 | R x0.5 | 20/20 (100%); 16.1 mm; NEES 0.93; sigma 15.5 mm | 20/20 (100%); 12.4 mm; NEES 0.59; sigma 8.1 mm |
-| R x1 | 20/20 (100%); 15.4 mm; NEES 0.95; sigma 20.0 mm | 20/20 (100%); 9.7 mm; NEES 0.79; sigma 12.1 mm |
+| R x1 | 30/30 (100%); 15.4 mm; NEES 0.94; sigma 20.6 mm | 30/30 (100%); 10.8 mm; NEES 0.78; sigma 13.9 mm |
 | R x2 | 20/20 (100%); 14.1 mm; NEES 0.87; sigma 28.0 mm | 20/20 (100%); 10.3 mm; NEES 0.76; sigma 17.9 mm |
 
 ## 9. Gaze behaviour: median [IQR] per config (descriptive cues, not a perception result; B faces forward by construction)

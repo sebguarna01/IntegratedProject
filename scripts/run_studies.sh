@@ -8,7 +8,7 @@
 set -u
 SENSOR=${SENSOR:-camera}; TRIALS=${TRIALS:-20}; CAP=${CAP:-300}; JOBS=${JOBS:-2}
 BLOCKS=${BLOCKS:-"main height heldout tilt lqr sens gaze mixed tallhard height_more false02 heldout_all"}
-PY="python scripts/search_study.py --sensor $SENSOR --trials $TRIALS --max-time $CAP --no-plots"
+PY="python scripts/search_study.py --sensor $SENSOR --trials $TRIALS --max-time $CAP"
 HEIGHTS="0.2 0.3 0.45 0.6"
 LEVELS="large_room large_6_pillars large_9_pillars l_room two_rooms zigzag corridor alcove cluttered_14 sparse_noisy_odom people_constant people_random"
 cmds=()
