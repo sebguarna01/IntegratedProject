@@ -487,7 +487,7 @@ ideal-camera study, camera sensor, 300 s cap (`results/d435i/`):
 
 | config | ideal camera, seeds 0-4 | D435i |
 |---|---|---|
-| B | 5 / 5 docked | 1 / 4 (seeds 0-3): 3 timeouts |
+| B | 5 / 5 docked | 1 / 5: 4 timeouts |
 | C-sweep | 5 / 5 | 0 / 5: 3 timeouts, 2 false docks (yaw 33-39 deg) |
 | C-info | 5 / 5 | 0 / 5: 5 false docks (yaw 31-34 deg) |
 
