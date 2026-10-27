@@ -516,3 +516,40 @@ Possible changes to the robot, not made (to decide as a team):
 - a dock servo that stops and looks instead of acting on a stale view;
 - a finish test on every one of the last views, not their mean;
 - a dock tilt, stand-off or marker height compatible with a 43 deg vertical field of view for B and C-sweep.
+
+## A camera chosen for an active head: Intel RealSense D455 (`--set camera=d455`)
+
+The two causes above are properties of the D435i's colour camera: a rolling shutter and a 43 deg vertical field of
+view. The D455, from the same family, has neither. Its colour camera has a **global shutter** (every row is exposed
+at once, so a turning camera blurs but does not skew) and a field of view of about 90 x 65 deg (Intel's pages also
+give 87 x 62 deg). The `d455` profile uses its 848 x 480 stream: the 1280 x 720 crop scaled down, 89.9 x 59.0 deg.
+
+To compare like with like, it keeps the D435i profile's exposure (10 ms), latency (60 ms) and frame rate. The sensor
+values are typical of 3 um global-shutter pixels; the intrinsics and distortion are representative values. The body
+is 124 x 26 x 29 mm with a 95 mm stereo baseline. Figure: `results/figures/camera_profiles_d455.png`.
+
+**Calibration** (`calibrate_camera.py --set camera=d455`): focal lengths within 0.1 px, principal point within 0.3 px,
+distortion recovered. The assumed and calibrated cameras differ by 0.45 px median (0.83 px max). Reprojection RMS is
+0.091 px with distortion and 0.189 px as a pinhole.
+
+**Marker characterisation** (`characterise_markers.py --set camera=d455`). The price of the wide view is fewer pixels
+per marker. Range noise is 1.4-1.9x the ideal camera's and normal noise 1.5-4x (11 deg at 4.5-5 m); the range bias is
+0.0050 r^2. The ideal camera's R would be over-confident (margin 0.6-1.0 at 4-5 m). The profile therefore doubles
+the range and normal noise in R (the study's "R x2" setting; the bearing noise is unchanged), which brings the margin
+back to 1.3-3.5. It also sets the range-bias correction to 0.0050.
+
+**End-to-end check** (same 15 trials as above, robot software unchanged; `results/d455/`):
+
+| config | ideal camera | D435i | D455 |
+|---|---|---|---|
+| B | 5 / 5 | 1 / 5 | **5 / 5** |
+| C-sweep | 5 / 5 | 0 / 5 | **5 / 5** |
+| C-info | 5 / 5 | 0 / 5 | **5 / 5** |
+
+With the D455, every trial docks: miss 1.2-2.5 cm, heading error 0.7-4.1 deg. Times are close to the ideal camera's on
+the same seeds (21-24 s on the easy seeds; 101-137 s on seeds 1 and 3, against 104-158 s).
+
+A level head now sees up to 0.47 m at the stand-off, above the top of the dock square at 0.40 m. Without the rolling
+shutter, measurements taken while the head turns are blurred but not biased, so the EKF accepts them and the dock
+servo stays fed. The D435i failures came from the camera's shutter and field of view, not from the robot: for a robot
+with an actively moving camera, a global-shutter camera is the right choice.

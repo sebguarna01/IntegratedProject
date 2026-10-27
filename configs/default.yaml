@@ -122,6 +122,42 @@ cameras:
     #    the ideal camera, then inflated) still bounds it and is kept. Only the bias correction is refitted.
     set: ["ekf.range_bias_coeff=0.0033"]
 
+  d455:
+    description: Intel RealSense D455 colour camera (OmniVision OV9782, GLOBAL shutter), 848 x 480 stream at 30 Hz
+    # Same family as the D435i; chosen for an active head: a global shutter (no rolling-shutter skew while the head turns)
+    # and a wider field of view. Datasheet: colour sensor global shutter, 1 MP (1280 x 800), field of view about
+    # 90 x 65 deg (Intel's pages also give 87 x 62 deg). The 848 x 480 stream is the 1280 x 720 crop scaled down: full
+    # width (90 deg), vertical 58.7 deg. Intrinsics and distortion: representative values, not one unit's calibration.
+    width: 848
+    height: 480
+    fx: 424.4
+    fy: 424.1
+    cx: 425.1
+    cy: 238.6
+    dist: [-0.056, 0.066, -0.0005, 0.0007, -0.021]  # wider lens: the same mild barrel reaches further out (assumed)
+    vignetting_corner: 0.70      # wide lens: darker corners (assumed)
+    # exposure, latency and frame rate: the same assumptions as the D435i profile, so the two compare like for like
+    exposure_s: 0.010
+    readout_s: 0.0               # global shutter: every row is exposed at the same time
+    fps: 30
+    latency_s: 0.06
+    # sensor (assumed: typical of a 3 um-pixel global-shutter CMOS; the OV9782 has 3 um pixels, 10-bit output)
+    full_well_e: 10000
+    read_noise_e: 3.0
+    exposure_white: 0.85
+    adc_bits: 10
+    bayer: RGGB
+    # body (datasheet: 124 x 26 x 29 mm, stereo baseline 95 mm); head mass and inertia stay as in the XML
+    body_size: [0.029, 0.124, 0.026]   # depth (x), width (y), height (z) [m]
+    stereo_baseline_m: 0.095
+    lens_offset: [0.0145, 0.0, 0.0]    # colour lens on the front face, centred sideways (a simplification)
+    # -- marker characterisation with this camera (results/marker_characterisation_d455.csv, refined, up to 5 m).
+    #    The wide view leaves the markers fewer pixels than with the ideal camera or the D435i: range noise is 1.4-1.9x
+    #    and normal noise 1.5-4x the ideal camera's, and the range bias is 0.0050 r^2. The ideal camera's R would be
+    #    over-confident here (margin 0.6-1.0 at 4-5 m), so R is doubled (the study's "R x2" setting, without the
+    #    bearing, whose noise is unchanged). That brings the margin back to 1.3-3.5, like the ideal camera's 1.6-2.7.
+    set: ["ekf.range_bias_coeff=0.0050", "ekf.range_sigma=[0.008,0.004]", "ekf.normal_sigma_deg=[0.6,0.12]"]
+
 gaze:                          # active gaze (behaviour/gaze.py)
   replan_s: 0.5                # re-choose where to look this often [s]
   slew_rad_s: 1.5              # head command rate limit [rad/s]

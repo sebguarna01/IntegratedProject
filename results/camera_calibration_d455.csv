@@ -1,0 +1,16 @@
+quantity,assumed,calibrated_full,calibrated_pinhole_only
+fx,424.400,424.512,431.602
+fy,424.100,424.198,430.880
+cx,425.100,424.833,424.407
+cy,238.600,238.878,237.566
+k1,-0.056000,-0.056844,0
+k2,0.066000,0.066743,0
+p1,-0.000500,-0.000309,0
+p2,0.000700,0.000617,0
+k3,-0.021000,-0.021329,0
+reprojection_rms_px,,0.0914,0.1891
+views,,30,30
+chain_translation_median_mm,,0.18,
+chain_rotation_median_deg,,0.107,
+pnp_translation_median_mm,,2.99,
+pnp_rotation_median_deg,,0.072,

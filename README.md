@@ -119,6 +119,7 @@ python scripts/search_study.py --sensor camera --level large_room --trials 20   
 SENSOR=camera JOBS=4 bash scripts/run_studies.sh   # the whole final study: all levels, dock heights, held-out seeds, tilt-free B, Q/R sensitivity (one 300 s cap)
 python scripts/watch_search.py                              # live viewer (3D view: mouse to rotate / move / zoom)
 python scripts/watch_search.py --set camera=d435i           # same, with the simulated RealSense D435i colour camera
+python scripts/watch_search.py --set camera=d455            # or the RealSense D455 colour camera (global shutter, 90 deg)
 pytest                                                      # unit tests
 ```
 
