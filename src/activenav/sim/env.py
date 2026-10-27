@@ -73,6 +73,7 @@ class DockingEnv:
         self._rng = np.random.default_rng(cfg.get("seed", 0))
         self._enc = EncoderErrorModel(self._noise, self._rng)
         self._renderer = None
+        self._free_renderer, self._free_cam = None, None
 
     # ------------------------------------------------------------------ control
     def reset(self, seed: int | None = None, start_pose=(1.0, -0.5, 0.0)) -> SensorBundle:
@@ -151,10 +152,50 @@ class DockingEnv:
                           0, 255).astype(np.uint8)
         return img
 
+    def render_free(self, lookat, distance: float, azimuth: float, elevation: float, width: int = 640, height: int = 480,
+                    fovy: float | None = None, depth: bool = False):
+        """Image from MuJoCo's free camera, not the robot's: aimed at `lookat` [m] from `distance` [m], `azimuth` and
+        `elevation` in degrees (MuJoCo's convention: elevation -90 looks straight down), vertical field of view `fovy`
+        [deg] (default: the model's). Returns (rgb uint8 (H, W, 3), depth, cam): depth (H, W) [m along the view axis]
+        only with depth=True (else None), and cam the camera MuJoCo drew with (mjvGLCamera), to project points.
+
+        DISPLAY ONLY (the live viewer's top view). It has its own renderer and never touches the random generator,
+        so it cannot change a trial. The head camera has its own field of view, so `fovy` does not affect it."""
+        r = self._free_renderer
+        if r is None or (r.height, r.width) != (height, width):
+            if r is not None:
+                r.close()
+            r = self._free_renderer = mujoco.Renderer(self.model, height=height, width=width)
+            self._free_cam = mujoco.MjvCamera()
+            self._free_cam.type = mujoco.mjtCamera.mjCAMERA_FREE
+        c = self._free_cam
+        c.lookat[:] = lookat
+        c.distance, c.azimuth, c.elevation = float(distance), float(azimuth), float(elevation)
+        vis = self.model.vis.global_
+        fovy0 = vis.fovy
+        if fovy is not None:
+            vis.fovy = float(fovy)              # the free camera reads it when the scene is updated: restored right after
+        try:
+            r.update_scene(self.data, camera=c)
+        finally:
+            vis.fovy = fovy0
+        img = r.render().copy()
+        dep = None
+        if depth:                                   # same scene, second pass for the depth buffer
+            r.enable_depth_rendering()
+            try:
+                dep = r.render().copy()
+            finally:
+                r.disable_depth_rendering()
+        return img, dep, mujoco.mjv_averageCamera(r.scene.camera[0], r.scene.camera[1])
+
     def close(self) -> None:
         if self._renderer is not None:
             self._renderer.close()
             self._renderer = None
+        if self._free_renderer is not None:
+            self._free_renderer.close()
+            self._free_renderer = None
 
     # ------------------------------------------------------------ evaluation only
     def ground_truth(self) -> np.ndarray:
