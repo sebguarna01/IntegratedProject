@@ -19,6 +19,7 @@ from activenav.evaluation.synthetic import SyntheticMarkerSensor
 from activenav.evaluation.synthetic import SyntheticObstacleSensor
 from activenav.geometry import obstacle_sdf
 from activenav.kinematics import wrap_angle
+from activenav.sensing.delay import OdometryHistory, marker_to_now, scan_to_now
 from activenav.sensing.odometry import WheelOdometry
 from activenav.types import Command
 
@@ -127,6 +128,8 @@ class SearchSession:
         self.s = env.reset(seed=seed, start_pose=self.start_pose)
         self.odo = WheelOdometry(env.wheel_radius, env.track_width)
         self.odo.reset((0.0, 0.0, 0.0), self.s.enc_left, self.s.enc_right)
+        self.odo_hist = OdometryHistory(dt=env.control_dt)          # for frames that arrive late (real-camera profiles)
+        self.odo_hist.reset(self.s.t)
         self.agent.reset()
         self.cam_dt = 1.0 / cfg["camera_rate_hz"]
         self.next_cam = 0.0
@@ -194,12 +197,17 @@ class SearchSession:
         due = self.s.t >= self.next_cam
         self.s = self.env.step(Command(v=v, w=w, pan_target=pan, tilt_target=tilt), render=bool(due and self.needs_image))
         self.odo.update(self.s.enc_left, self.s.enc_right)
+        self.odo_hist.add(self.s.t, self.odo.last_ds, self.odo.last_dtheta)
         a.predict(self.odo.last_ds, self.odo.last_dtheta)
         if due:
             self.next_cam = self.s.t + self.cam_dt
             self.n_cam += 1
             self.last_image = self.s.image
-            a.on_frame(self.s.t, self.marker_sensor.measure(self.s), self.front.scan_sb(self.s))
+            zs, scan = self.marker_sensor.measure(self.s), self.front.scan_sb(self.s)
+            if self.s.image_t is not None:                           # a late frame: carry it into the base frame of now
+                motion = self.odo_hist.motion_since(self.s.image_t)
+                zs, scan = [marker_to_now(z, motion) for z in zs], scan_to_now(scan, motion)
+            a.on_frame(self.s.t, zs, scan)
         self._log()
         return True
 
@@ -319,6 +327,10 @@ def make_search_session(cfg, cache, conf, seed, level=None, start=None, sensor="
     if levels[level].get("set"):                     # a level may change settings (e.g. noisier odometry): `set: ["a.b=1", ...]`
         from activenav.config import apply_overrides
         c = apply_overrides(copy.deepcopy(cfg), levels[level]["set"])
+    from activenav.sensing.camera import camera_settings
+    if camera_settings(cfg):                         # so may a real-camera profile (e.g. the EKF range-bias fitted to it)
+        from activenav.config import apply_overrides
+        c = apply_overrides(copy.deepcopy(c), camera_settings(cfg))
     if random_dock:
         c = copy.deepcopy(c)
         c["random_markers"]["keep_ids"] = []

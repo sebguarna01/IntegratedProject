@@ -4,7 +4,7 @@ from __future__ import annotations
 import cv2
 import numpy as np
 
-from activenav.sensing.camera import intrinsics_from_fovy
+from activenav.sensing.camera import camera_model
 from activenav.sensing.camera import hom
 from activenav.sensing.camera import camera_to_base
 from activenav.types import MarkerDetection
@@ -95,16 +95,15 @@ class MarkerSensor:
     needs_image = True
 
     def __init__(self, cfg: dict):
-        cam = cfg["sim"]["camera"]
-        K = intrinsics_from_fovy(cfg["camera_model"]["fovy_deg"], cam["width"], cam["height"])
-        self._det = ArucoMarkerDetector(K, cfg["perception"]["marker_size_m"])
-        self._head = cfg["head"]
+        cam = camera_model(cfg)                                 # intrinsics and distortion of the camera profile in use
+        self._det = ArucoMarkerDetector(cam.K, cfg["perception"]["marker_size_m"], dist_coeffs=cam.dist)
+        self._head = cam.head
         self.last_detections = []       # corners of the most recent frame's detections (for the live viewer)
 
     def measure(self, sb: SensorBundle) -> list[MarkerMeasurement]:
         if sb.image is None:
             return []
-        T_B_C = camera_to_base(self._head, sb.pan, sb.tilt)     # measured (noisy) head angles
+        T_B_C = camera_to_base(self._head, sb.view_pan, sb.view_tilt)   # measured (noisy) head angles when the image was taken
         self.last_detections = list(self._det.detect(sb.image))
         base_h = float(self._head.get("base_height", 0.0))
         return [measure_marker(T_B_C, d, base_h) for d in self.last_detections]

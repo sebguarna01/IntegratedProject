@@ -16,6 +16,21 @@ class SensorBundle:
     pan: float                     # pan joint angle, noisy [rad]
     tilt: float                    # tilt joint angle, noisy [rad] (+ = look down)
     image: Optional[np.ndarray] = None   # RGB uint8 (H, W, 3) or None
+    # A camera with a delay (real-camera profiles) delivers a frame captured earlier: when it was captured, and the head
+    # encoder readings at that moment (the driver time-stamps frames, so they can be matched). None: same as above.
+    image_t: Optional[float] = None
+    image_pan: Optional[float] = None
+    image_tilt: Optional[float] = None
+
+    @property
+    def view_pan(self) -> float:
+        """Pan angle the image was taken at."""
+        return self.pan if self.image_pan is None else self.image_pan
+
+    @property
+    def view_tilt(self) -> float:
+        """Tilt angle the image was taken at."""
+        return self.tilt if self.image_tilt is None else self.image_tilt
 
 
 @dataclass(frozen=True)

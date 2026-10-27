@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from activenav.sensing.camera import intrinsics_from_fovy
+from activenav.sensing.camera import camera_model, pixel_rays
 from activenav.sensing.camera import camera_to_base
 
 
@@ -26,16 +26,17 @@ class ObstacleScan:
 
 
 class GroundGeometry:
-    """Pixel <-> floor point for the pan-tilt camera, from the head geometry and the camera intrinsics."""
+    """Pixel <-> floor point for the pan-tilt camera, from the head geometry and the camera intrinsics (and lens
+    distortion, for a real-camera profile)."""
 
     def __init__(self, cfg: dict):
-        cam = cfg["sim"]["camera"]
-        self.W, self.H = int(cam["width"]), int(cam["height"])
-        self.K = intrinsics_from_fovy(cfg["camera_model"]["fovy_deg"], self.W, self.H)
+        self.camera = cam = camera_model(cfg)
+        self.W, self.H = cam.width, cam.height
+        self.K = cam.K
         self.Kinv = np.linalg.inv(self.K)
-        self.head = cfg["head"]
+        self.head = cam.head
         self.floor_z = -float(cfg["head"].get("base_height", 0.0))      # floor height in the base frame
-        self.vfov = np.radians(cfg["camera_model"]["fovy_deg"])
+        self.vfov = cam.vfov
         self.focal = float(self.K[1, 1])
 
     def cam_height(self) -> float:
@@ -49,7 +50,10 @@ class GroundGeometry:
         """Base-frame (x, y) of the floor point under pixel(s) (u, v), and a validity mask (ray points down)."""
         R, o = self.pose(pan, tilt)
         u, v = np.atleast_1d(np.asarray(u, float)), np.atleast_1d(np.asarray(v, float))
-        d = (R @ (self.Kinv @ np.vstack([u, v, np.ones_like(u)]))).T          # (n, 3) ray directions, base frame
+        if self.camera.dist is None:
+            d = (R @ (self.Kinv @ np.vstack([u, v, np.ones_like(u)]))).T      # (n, 3) ray directions, base frame
+        else:
+            d = (R @ pixel_rays(self.camera, u, v).T).T                       # lens distortion removed first
         ok = d[:, 2] < -1e-6
         s = np.where(ok, (self.floor_z - o[2]) / np.where(ok, d[:, 2], -1.0), 0.0)
         pts = o[None, :2] + s[:, None] * d[:, :2]

@@ -1,17 +1,19 @@
 """Calibrate the head camera from rendered checkerboard views, and check the pan-tilt frame chain (Part B of the brief).
 
     python scripts/calibrate_camera.py [--views 30] [--seed 0]      (needs a GL context: MUJOCO_GL=glfw or egl)
+    python scripts/calibrate_camera.py --set camera=d435i           # the RealSense D435i colour camera profile
 
 1. Builds a small scene (floor + one checkerboard plate) around the real robot and renders the real head camera
-   (same resolution, same pixel noise) from random robot poses and pan-tilt angles.
-2. Finds the corners, runs cv2.calibrateCamera, and compares the result with the analytic matrix from fovy_deg
-   (sensing/camera.py: intrinsics_from_fovy). Reports focal lengths, principal point, distortion and reprojection error,
+   (same resolution, same image formation) from random robot poses and pan-tilt angles.
+2. Finds the corners, runs cv2.calibrateCamera, and compares the result with what the robot assumes about its camera
+   (sensing/camera.py: camera_model; for the ideal camera the analytic matrix from fovy_deg, for a real-camera profile
+   its intrinsics and lens distortion). Reports focal lengths, principal point, distortion and reprojection error,
    for the full model and for a pinhole-only model (is distortion worth modelling?).
 3. Frame chain: for every view, the camera pose three ways, in the world frame, all compared with MuJoCo's own camera pose:
    (a) the base pose and noisy head encoders pushed through camera_to_base (what the robot computes),
    (b) solvePnP on the detected board with the calibrated camera (what the image says).
 Ground truth (true base pose, MuJoCo camera pose) is used only to score: this is an evaluation script.
-Outputs: results/camera_calibration.csv, results/figures/camera_calibration.png
+Outputs: results/camera_calibration.csv, results/figures/camera_calibration.png (another profile: *_<profile>.csv / .png)
 """
 import argparse
 import copy
@@ -24,8 +26,8 @@ import matplotlib.pyplot as plt
 import mujoco
 import numpy as np
 
-from activenav.config import load_config
-from activenav.sensing.camera import board_points, calibrate, camera_to_base, hom, intrinsics_from_fovy, pose_difference
+from activenav.config import apply_overrides, load_config
+from activenav.sensing.camera import board_points, calibrate, camera_model, camera_to_base, hom, pose_difference
 from activenav.sim.env import DockingEnv
 from activenav.types import Command
 
@@ -76,14 +78,17 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--views", type=int, default=30)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--set", nargs="*", default=[], metavar="KEY=VALUE", help="e.g. camera=d435i")
     args = ap.parse_args()
 
-    cfg = load_config()
+    cfg = apply_overrides(load_config(), args.set)
+    cam = camera_model(cfg)
+    suffix = "" if cam.name == "ideal" else f"_{cam.name}"
     c = copy.deepcopy(cfg)
     c["world"] = None
     c["sim"]["model"] = str(build_scene(cfg).relative_to(cfg["_root"]))
     env = DockingEnv(c)
-    W, H = cfg["sim"]["camera"]["width"], cfg["sim"]["camera"]["height"]
+    W, H = cam.width, cam.height
     rng = np.random.default_rng(args.seed)
     obj = board_points(COLS, ROWS, SQUARE)
     T_wb = T_world_board()
@@ -97,7 +102,11 @@ def main():
         s = env.reset(seed=int(rng.integers(1 << 30)), start_pose=pose)
         for _ in range(150):                                   # let the head settle on its targets
             s = env.step(Command(pan_target=pan, tilt_target=tilt))
-        img = env.render()
+        if cam.name == "ideal":
+            img = env.render()
+        else:                                                  # an image as the robot receives it (frame timing, encoders)
+            s = env.step(Command(pan_target=pan, tilt_target=tilt), render=True)
+            img = s.image
         gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
         ok, corners = cv2.findChessboardCorners(gray, (COLS, ROWS), cv2.CALIB_CB_ADAPTIVE_THRESH | cv2.CALIB_CB_NORMALIZE_IMAGE)
         if not ok:
@@ -108,7 +117,7 @@ def main():
             continue
         obj_pts.append(obj)
         img_pts.append(corners)
-        meta.append((env.ground_truth().copy(), s.pan, s.tilt, true_camera_pose(env)))
+        meta.append((env.ground_truth().copy(), s.view_pan, s.view_tilt, true_camera_pose(env)))
     n = len(img_pts)
     print(f"{n} views with all {COLS * ROWS} corners found ({tries} tried)")
     if n < 10:
@@ -116,26 +125,34 @@ def main():
 
     full = calibrate(obj_pts, img_pts, (W, H))
     pin = calibrate(obj_pts, img_pts, (W, H), pinhole_only=True)
-    K0 = intrinsics_from_fovy(cfg["camera_model"]["fovy_deg"], W, H)
+    K0, d0 = cam.K, (np.zeros(5) if cam.dist is None else cam.dist)
     names = ["fx", "fy", "cx", "cy"]
     got = [full["K"][0, 0], full["K"][1, 1], full["K"][0, 2], full["K"][1, 2]]
     ref = [K0[0, 0], K0[1, 1], K0[0, 2], K0[1, 2]]
-    print(f"\n{'':8s}{'analytic (fovy)':>16s}{'calibrated':>14s}{'difference':>12s}")
+    print(f"camera profile: {cam.name} ({W} x {H})")
+    print(f"\n{'':8s}{'assumed':>16s}{'calibrated':>14s}{'difference':>12s}")
     for nm, a, b in zip(names, ref, got):
         print(f"{nm:8s}{a:16.2f}{b:14.2f}{b - a:+12.2f}  px")
-    print(f"distortion (k1 k2 p1 p2 k3) = {np.array2string(full['dist'], precision=4, suppress_small=True)}")
+    print(f"distortion (k1 k2 p1 p2 k3): assumed {np.array2string(d0, precision=4, suppress_small=True)}, "
+          f"calibrated {np.array2string(full['dist'], precision=4, suppress_small=True)}")
+    # what the differences mean in pixels: where the assumed camera puts the rays the calibrated one gives each pixel
+    grid = np.stack(np.meshgrid(np.linspace(0, W - 1, 17), np.linspace(0, H - 1, 11)), -1).reshape(-1, 1, 2)
+    rays = cv2.undistortPoints(grid, full["K"], full["dist"]).reshape(-1, 2)
+    back, _ = cv2.projectPoints(np.c_[rays, np.ones(len(rays))].reshape(-1, 1, 3), np.zeros(3), np.zeros(3), K0, d0)
+    gap = np.linalg.norm(back.reshape(-1, 2) - grid.reshape(-1, 2), axis=1)
+    print(f"assumed vs calibrated camera over the image: median {np.median(gap):.2f} px, max {gap.max():.2f} px")
     print(f"reprojection RMS: full model {full['rms']:.3f} px, pinhole only {pin['rms']:.3f} px "
           f"(worst view {full['per_image_rms'].max():.3f} px)")
     hfov = np.degrees(2 * np.arctan(W / (2 * full["K"][0, 0])))
     print(f"horizontal field of view from the calibration: {hfov:.2f} deg; vertical {np.degrees(2 * np.arctan(H / (2 * full['K'][1, 1]))):.2f} deg "
-          f"(config fovy {cfg['camera_model']['fovy_deg']} deg)")
+          f"(assumed {np.degrees(cam.hfov):.2f} x {np.degrees(cam.vfov):.2f} deg)")
 
     e_chain, e_pnp = [], []
     for (gt, pan, tilt, T_true), o, i in zip(meta, obj_pts, img_pts):
         # chain pose from the true base pose of THIS view (stored in gt) and the noisy encoders the robot read
         cth, sth = np.cos(gt[2]), np.sin(gt[2])
-        T_wbase = hom(np.array([[cth, -sth, 0], [sth, cth, 0], [0, 0, 1.0]]), [gt[0], gt[1], cfg["head"]["base_height"]])
-        T_chain = T_wbase @ camera_to_base(cfg["head"], pan, tilt)
+        T_wbase = hom(np.array([[cth, -sth, 0], [sth, cth, 0], [0, 0, 1.0]]), [gt[0], gt[1], cam.head["base_height"]])
+        T_chain = T_wbase @ camera_to_base(cam.head, pan, tilt)
         okp, rv, tv = cv2.solvePnP(o, i, full["K"], full["dist"], flags=cv2.SOLVEPNP_ITERATIVE)
         T_cb = hom(cv2.Rodrigues(rv)[0], tv.ravel())
         T_pnp = T_wb @ np.linalg.inv(T_cb)
@@ -147,16 +164,16 @@ def main():
           f"(max {1e3 * e_chain[:, 0].max():.1f}), rotation median {np.median(e_chain[:, 1]):.2f} deg (max {e_chain[:, 1].max():.2f})")
     print(f"  checkerboard PnP with the calibrated camera:      translation median {1e3 * np.median(e_pnp[:, 0]):.1f} mm "
           f"(max {1e3 * e_pnp[:, 0].max():.1f}), rotation median {np.median(e_pnp[:, 1]):.2f} deg (max {e_pnp[:, 1].max():.2f})")
-    print("(encoder noise 0.002 rad per joint is about 0.1 deg per joint; the PnP numbers include corner noise from the 2 grey-level pixel noise)")
+    print("(encoder noise 0.002 rad per joint is about 0.1 deg per joint; the PnP numbers include the corner noise from the image noise)")
 
     out = cfg["_root"] / "results"
-    with open(out / "camera_calibration.csv", "w", newline="") as f:
+    with open(out / f"camera_calibration{suffix}.csv", "w", newline="") as f:
         w = csv.writer(f)
-        w.writerow(["quantity", "analytic", "calibrated_full", "calibrated_pinhole_only"])
+        w.writerow(["quantity", "analytic" if cam.name == "ideal" else "assumed", "calibrated_full", "calibrated_pinhole_only"])
         for nm, a, b, p in zip(names, ref, got, [pin["K"][0, 0], pin["K"][1, 1], pin["K"][0, 2], pin["K"][1, 2]]):
             w.writerow([nm, f"{a:.3f}", f"{b:.3f}", f"{p:.3f}"])
-        for nm, v in zip(["k1", "k2", "p1", "p2", "k3"], full["dist"]):
-            w.writerow([nm, 0, f"{v:.6f}", 0])
+        for nm, a, v in zip(["k1", "k2", "p1", "p2", "k3"], d0, full["dist"]):
+            w.writerow([nm, 0 if cam.dist is None else f"{a:.6f}", f"{v:.6f}", 0])
         w.writerow(["reprojection_rms_px", "", f"{full['rms']:.4f}", f"{pin['rms']:.4f}"])
         w.writerow(["views", "", n, n])
         w.writerow(["chain_translation_median_mm", "", f"{1e3 * np.median(e_chain[:, 0]):.2f}", ""])
@@ -178,8 +195,8 @@ def main():
     ax[2].legend()
     ax[2].grid(True)
     fig.tight_layout()
-    fig.savefig(out / "figures" / "camera_calibration.png", dpi=150)
-    print("\nsaved results/camera_calibration.csv and results/figures/camera_calibration.png")
+    fig.savefig(out / "figures" / f"camera_calibration{suffix}.png", dpi=150)
+    print(f"\nsaved results/camera_calibration{suffix}.csv and results/figures/camera_calibration{suffix}.png")
     env.close()
 
 

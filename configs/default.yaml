@@ -77,6 +77,51 @@ ekf:                           # Config B / C estimator. Values derived from res
 
 camera_rate_hz: 10.0           # how often the camera is rendered / marker measurements are fused
 
+# Head camera profile. `ideal` is the camera every result so far was collected with: pinhole, 60 deg vertical field of view,
+# 640 x 480, Gaussian pixel noise, no lens distortion, no blur, no delay (sim.camera, camera_model above).
+# `d435i` is the colour camera of an Intel RealSense D435i simulated as a real camera (sim/realsense.py): select it with
+#   --set camera=d435i
+# It changes the image the robot gets (and what it knows about its camera), not the robot's algorithms.
+camera: ideal
+
+cameras:
+  d435i:
+    description: Intel RealSense D435i colour camera (OmniVision OV2740, rolling shutter), 848 x 480 stream at 30 Hz
+    # -- optics. Datasheet: colour field of view 69 x 42 deg (+-3 deg). The 848 x 480 stream's intrinsics and distortion
+    #    below are representative of this model (every unit has its own factory calibration), not one camera's values.
+    width: 848
+    height: 480
+    fx: 609.3                    # [px] -> horizontal field of view 69.6 deg
+    fy: 609.0                    # [px] -> vertical field of view 43.0 deg
+    cx: 426.2                    # principal point, a few pixels off centre as on a real unit
+    cy: 243.4
+    dist: [-0.055, 0.065, 0.0004, -0.0006, -0.018]   # Brown-Conrady k1 k2 p1 p2 k3 (OpenCV order): mild barrel, ~6 px at the corners
+    vignetting_corner: 0.78      # relative illumination at the image corner (assumed)
+    # -- exposure and readout (assumed: indoor auto-exposure in a well-lit room)
+    exposure_s: 0.010            # the pixels integrate the scene over this time: motion blur when the head turns
+    readout_s: 0.020             # rolling shutter: first to last row; a turning camera skews the image
+    fps: 30                      # frames come out on a 30 Hz grid (datasheet: 30 fps at this resolution)
+    latency_s: 0.06              # capture to delivery (USB, driver) (assumed). Frames carry their capture time and the
+                                 # head encoder readings of that moment; the robot fuses them when they arrive
+    # -- sensor (assumed: typical of a 1.4 um-pixel CMOS colour sensor; the OV2740 has 1.4 um pixels, 10-bit output)
+    full_well_e: 4500            # electrons at saturation
+    read_noise_e: 2.5            # read noise [electrons rms]
+    exposure_white: 0.85         # a white surface under the room light fills this fraction of the full well
+    adc_bits: 10
+    bayer: RGGB                  # colour filter pattern; the image is demosaiced (OpenCV edge-aware), then sRGB gamma
+    # -- body on the pan-tilt head. Datasheet: 90 x 25 x 25 mm, 72 g, stereo baseline 50 mm. The tilt axis passes
+    #    through the module centre; head mass and inertia stay as in the XML (0.1 kg: camera + bracket; the servo's
+    #    reflected inertia dominates the payload's).
+    body_size: [0.025, 0.090, 0.025]   # depth (x), width (y), height (z) [m]
+    stereo_baseline_m: 0.050
+    lens_offset: [0.0125, 0.0, 0.0]    # colour lens from the tilt axis [m]: on the front face. Centred sideways (a
+                                       # simplification: on the module the colour lens sits a few cm to one side)
+    # -- what changes elsewhere with this camera (applied like --set when a trial is built). Characterisation with this
+    #    camera (results/marker_characterisation_d435i.csv, refined detections up to 5 m): range bias 0.0033 r^2 (ideal
+    #    camera 0.0020); range, bearing and normal noise at or below the ideal camera's, so the EKF noise R (fitted to
+    #    the ideal camera, then inflated) still bounds it and is kept. Only the bias correction is refitted.
+    set: ["ekf.range_bias_coeff=0.0033"]
+
 gaze:                          # active gaze (behaviour/gaze.py)
   replan_s: 0.5                # re-choose where to look this often [s]
   slew_rad_s: 1.5              # head command rate limit [rad/s]

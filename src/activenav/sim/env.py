@@ -32,7 +32,20 @@ class DockingEnv:
             model_path = build_scene(cfg, cfg["world"], cfg.get("world_markers"), cfg.get("world_tag", ""))      # generated from configs/default.yaml `worlds`
         else:
             model_path = Path(cfg["_root"]) / cfg["sim"]["model"]
-        self.model = mujoco.MjModel.from_xml_path(str(model_path))
+        # head camera profile: `ideal` keeps the model as written; a real camera (e.g. d435i) is mounted on the head and
+        # its images go through that camera's image formation (sim/realsense.py)
+        from activenav.sensing.camera import camera_model
+        self.camera = camera_model(cfg)
+        self._color = None
+        if self.camera.name == "ideal":
+            self.model = mujoco.MjModel.from_xml_path(str(model_path))
+        else:
+            from activenav.sim.realsense import ColorCamera, mount_on_head
+            prof = cfg["cameras"][self.camera.name]
+            self._color = ColorCamera(prof)
+            spec = mujoco.MjSpec.from_file(str(model_path))
+            mount_on_head(spec, prof, self._color.render_fovy, self._color.render_w, self._color.render_h)
+            self.model = spec.compile()
         # MuJoCo's near clip is znear * model extent, so it grew with the room (0.17 m in 10x6, 0.21 m in 10x10) and
         # clipped the nearest floor at steep tilt. Pin it to the 10x6 value: it also hides the robot's own body.
         self.model.vis.map.znear = 0.17 / float(self.model.stat.extent)
@@ -74,6 +87,15 @@ class DockingEnv:
         self._enc = EncoderErrorModel(self._noise, self._rng)
         self._renderer = None
         self._free_renderer, self._free_cam = None, None
+        if self._color is not None:
+            # a real camera delivers frames late: keep the recent states (one per control step) so the frame handed
+            # over at time t shows the scene at its capture time; rendering uses its own MjData (physics untouched)
+            from collections import deque
+            prof = cfg["cameras"][self.camera.name]
+            self._latency, self._frame_dt = float(prof["latency_s"]), 1.0 / float(prof["fps"])
+            self._history = deque(maxlen=int(np.ceil((self._latency + self._frame_dt) / self.control_dt)) + 3)
+            self._rdata = mujoco.MjData(self.model)
+            self._cam_id = _id(m, mujoco.mjtObj.mjOBJ_CAMERA, cfg["sim"]["camera"]["name"])
 
     # ------------------------------------------------------------------ control
     def reset(self, seed: int | None = None, start_pose=(1.0, -0.5, 0.0)) -> SensorBundle:
@@ -95,6 +117,8 @@ class DockingEnv:
         mujoco.mj_forward(m, d)
 
         self._enc.reset(self._true_encoders(), rng=self._rng)   # draws this trial's systematic errors
+        if self._color is not None:
+            self._history.clear()
         return self._sensors(render=False)
 
     def step(self, cmd: Command, render: bool = False) -> SensorBundle:
@@ -132,15 +156,51 @@ class DockingEnv:
         head_std = self._noise["head_encoder_std"]
         pan = d.qpos[self._q["head_pan"]] + self._rng.normal(0.0, head_std)
         tilt = d.qpos[self._q["head_tilt"]] + self._rng.normal(0.0, head_std)
+        if self._color is not None:
+            return self._sensors_real_camera(enc, float(pan), float(tilt), render)
         image = self.render() if render else None
         return SensorBundle(t=float(d.time), enc_left=float(enc[0]), enc_right=float(enc[1]),
                             pan=float(pan), tilt=float(tilt), image=image)
 
+    # ------------------------------------------------------- real-camera profiles
+    def _snapshot(self, pan=None, tilt=None):
+        """What a frame needs: the scene state, the camera's angular velocity (blur, rolling shutter) and the head
+        encoder readings of that moment."""
+        d = self.data
+        v = np.zeros(6)
+        mujoco.mj_objectVelocity(self.model, d, mujoco.mjtObj.mjOBJ_CAMERA, self._cam_id, v, 1)
+        omega = np.array([v[0], -v[1], -v[2]])          # MuJoCo camera axes (x right, y up, z back) -> OpenCV (y down, z forward)
+        return float(d.time), d.qpos.copy(), d.mocap_pos.copy(), d.mocap_quat.copy(), omega, pan, tilt
+
+    def _sensors_real_camera(self, enc, pan: float, tilt: float, render: bool) -> SensorBundle:
+        d = self.data
+        self._history.append(self._snapshot(pan, tilt))
+        if not render:
+            return SensorBundle(t=float(d.time), enc_left=float(enc[0]), enc_right=float(enc[1]), pan=pan, tilt=tilt)
+        # the newest frame already delivered: captured on the camera's frame grid, at least `latency` ago
+        t_cap = np.floor((float(d.time) - self._latency) / self._frame_dt + 1e-9) * self._frame_dt
+        snap = min(self._history, key=lambda s: abs(s[0] - t_cap))
+        return SensorBundle(t=float(d.time), enc_left=float(enc[0]), enc_right=float(enc[1]), pan=pan, tilt=tilt,
+                            image=self._render_snapshot(snap, self._rng), image_t=snap[0], image_pan=snap[5], image_tilt=snap[6])
+
+    def _render_snapshot(self, snap, rng) -> np.ndarray:
+        """Ideal render of a stored state, through the camera's image formation (rng None: no sensor noise)."""
+        rd = self._rdata
+        rd.qpos[:], rd.mocap_pos[:], rd.mocap_quat[:] = snap[1], snap[2], snap[3]
+        mujoco.mj_kinematics(self.model, rd)
+        mujoco.mj_camlight(self.model, rd)
+        if self._renderer is None:
+            self._renderer = mujoco.Renderer(self.model, height=self._color.render_h, width=self._color.render_w)
+        self._renderer.update_scene(rd, camera=self.cfg["sim"]["camera"]["name"])
+        return self._color(self._renderer.render(), snap[4], rng)
+
     def render(self, noise: bool = True) -> np.ndarray:
-        """RGB image from the head camera, uint8 (H, W, 3).
+        """RGB image from the head camera, uint8 (H, W, 3), of the scene as it is now.
 
         noise=False skips the sensor noise AND does not touch the random generator, so rendering extra frames
         purely for display (the live viewer) cannot change the trial's random sequence."""
+        if self._color is not None:
+            return self._render_snapshot(self._snapshot(), self._rng if noise else None)
         cam = self.cfg["sim"]["camera"]
         if self._renderer is None:
             self._renderer = mujoco.Renderer(self.model, height=cam["height"], width=cam["width"])

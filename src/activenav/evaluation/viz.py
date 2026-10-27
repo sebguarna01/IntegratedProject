@@ -478,7 +478,7 @@ class SearchWatcher:
         if a.target is not None:
             cv2.drawMarker(img, v.p(*a.target), RED if a.state == "APPROACH" else MAGENTA, cv2.MARKER_STAR, 12, 2)
         x, y, th = a.pose
-        half = np.arctan(np.tan(np.radians(self.cfg["camera_model"]["fovy_deg"]) / 2) * 640 / 480)
+        half = self.env.camera.hfov / 2                                       # horizontal field of view of the camera in use
         yaw = th + s.s.pan
         R = self.cfg["obstacles"]["max_range"]
         wedge = [v.p(x, y)] + [v.p(x + R * np.cos(yaw + q), y + R * np.sin(yaw + q)) for q in np.linspace(-half, half, 16)]
@@ -508,13 +508,23 @@ class SearchWatcher:
     def draw_camera(self, pw=CAM_W, ph=CAM_H):
         img = np.full((ph, pw, 3), 60, np.uint8)
         if self.cam_img is not None:
-            img = cv2.cvtColor(cv2.resize(self.cam_img, (pw, ph)), cv2.COLOR_RGB2BGR)
+            h, w = self.cam_img.shape[:2]
+            if abs(w / h - pw / ph) < 1e-3:
+                img = cv2.cvtColor(cv2.resize(self.cam_img, (pw, ph)), cv2.COLOR_RGB2BGR)
+            else:                                                       # another aspect ratio (D435i: 16:9): fit, no stretch
+                s = min(pw / w, ph / h)
+                fw, fh = int(round(w * s)), int(round(h * s))
+                x0, y0 = (pw - fw) // 2, (ph - fh) // 2
+                img[y0:y0 + fh, x0:x0 + fw] = cv2.cvtColor(cv2.resize(self.cam_img, (fw, fh), interpolation=cv2.INTER_AREA),
+                                                           cv2.COLOR_RGB2BGR)
             for z, info in self.session.agent.events:
                 put(img, f"marker {z.marker_id}  {z.range:.1f} m", (10, 20 + 18 * int(z.marker_id % 8)), 0.5,
                     GREEN if z.marker_id == self.session.agent.dock_id else WHITE)
         else:
             put(img, "no camera image (GL unavailable)" if not self.render_ok else "rendering...", (pw // 2 - 170, ph // 2), 0.6)
-        put(img, f"Config {self.conf}   pan {np.degrees(self.session.s.pan):+.0f} deg", (10, ph - 12), 0.5, YELLOW)
+        cam = self.env.camera
+        put(img, f"Config {self.conf}   pan {np.degrees(self.session.s.pan):+.0f} deg"
+            + ("" if cam.name == "ideal" else f"   camera {cam.name} {cam.width}x{cam.height}"), (10, ph - 12), 0.5, YELLOW)
         return img
 
     def _status(self):
@@ -592,7 +602,7 @@ class SearchWatcher:
         x, y, yaw = self.env.ground_truth()
         # head camera field of view on the floor: the same wedge as on the map, at the TRUE pose, cut at the walls;
         # only floor pixels are tinted, so pillars, people and walls in front of it stay as they are
-        half = np.arctan(np.tan(np.radians(self.cfg["camera_model"]["fovy_deg"]) / 2) * 640 / 480)
+        half = self.env.camera.hfov / 2
         R = self.cfg["obstacles"]["max_range"]
         fx0, fx1, fy0, fy1 = self.env.room_bounds()
         pts = [(x, y, 0.0)]

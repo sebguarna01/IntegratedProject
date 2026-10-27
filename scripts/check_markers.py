@@ -3,10 +3,13 @@
 
     python scripts/make_markers.py        # once
     python scripts/check_markers.py
+    python scripts/check_markers.py --set camera=d435i      # the RealSense D435i colour camera profile
 
 Ground truth is read here only to score the measurements (this is an evaluation script).
-Outputs: results/figures/marker_check.png
+Outputs: results/figures/marker_check.png (another camera profile: marker_check_<profile>.png)
 """
+import argparse
+
 import cv2
 import matplotlib
 matplotlib.use("Agg")
@@ -14,11 +17,11 @@ import matplotlib.pyplot as plt
 import mujoco
 import numpy as np
 
-from activenav.config import load_config
+from activenav.config import apply_overrides, load_config
 from activenav.kinematics import wrap_angle
 from activenav.sensing.markers import ArucoMarkerDetector
 from activenav.sensing.markers import measure_marker
-from activenav.sensing.camera import intrinsics_from_fovy
+from activenav.sensing.camera import camera_model
 from activenav.sensing.camera import camera_to_base
 from activenav.sim.env import DockingEnv
 from activenav.types import Command
@@ -35,7 +38,7 @@ VIEWS = [
 
 def check_config_against_model(cfg, env):
     m = env.model
-    h = cfg["head"]
+    h = camera_model(cfg).head                            # the camera profile's lens position
     cam = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_CAMERA, "head_cam")
     pairs = [("pan_origin", m.body("head_pan").pos), ("tilt_offset", m.body("head_tilt").pos),
              ("camera_offset", m.cam_pos[cam])]
@@ -44,23 +47,25 @@ def check_config_against_model(cfg, env):
         if not np.allclose(h[key], model_val, atol=1e-6):
             ok = False
             print(f"CONFIG MISMATCH head.{key}: config {h[key]} vs model {list(model_val)}")
-    if abs(cfg["camera_model"]["fovy_deg"] - float(m.cam_fovy[cam])) > 1e-6:
+    fovy = cfg["camera_model"]["fovy_deg"] if env._color is None else env._color.render_fovy   # a real camera renders wider, then resamples
+    if abs(fovy - float(m.cam_fovy[cam])) > 1e-6:
         ok = False
-        print(f"CONFIG MISMATCH camera_model.fovy_deg: config {cfg['camera_model']['fovy_deg']} "
+        print(f"CONFIG MISMATCH camera field of view: config {fovy} "
               f"vs model {float(m.cam_fovy[cam])}")
     print("config matches model" if ok else "FIX THE CONFIG MISMATCHES ABOVE")
 
 
 def main():
-    cfg = load_config()
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--set", nargs="*", default=[], metavar="KEY=VALUE", help="e.g. camera=d435i")
+    cfg = apply_overrides(load_config(), ap.parse_args().set)
     env = DockingEnv(cfg)
     check_config_against_model(cfg, env)
     markers = env.marker_map()
     print("markers in scene:", sorted(markers))
 
-    cam = cfg["sim"]["camera"]
-    K = intrinsics_from_fovy(cfg["camera_model"]["fovy_deg"], cam["width"], cam["height"])
-    det = ArucoMarkerDetector(K, cfg["perception"]["marker_size_m"])
+    cam = camera_model(cfg)
+    det = ArucoMarkerDetector(cam.K, cfg["perception"]["marker_size_m"], dist_coeffs=cam.dist)
 
     fig, axes = plt.subplots(1, len(VIEWS), figsize=(4.2 * len(VIEWS), 3.6))
     rows, _any_found = [], False
@@ -72,7 +77,7 @@ def main():
         s = env.step(Command(pan_target=pan, tilt_target=tilt), render=True)
         img = s.image
         dets = det.detect(img)
-        T_B_C = camera_to_base(cfg["head"], s.pan, s.tilt)   # measured (noisy) head angles
+        T_B_C = camera_to_base(cam.head, s.view_pan, s.view_tilt)   # measured (noisy) head angles when the image was taken
         gt = env.ground_truth()
 
         ax.imshow(img)
@@ -101,7 +106,7 @@ def main():
     env.close()
 
     fig.tight_layout()
-    out = cfg["_root"] / "results" / "figures" / "marker_check.png"
+    out = cfg["_root"] / "results" / "figures" / ("marker_check.png" if cam.name == "ideal" else f"marker_check_{cam.name}.png")
     fig.savefig(out, dpi=130)
     print(f"saved {out.relative_to(cfg['_root'])}\n")
 

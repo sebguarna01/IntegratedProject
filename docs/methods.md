@@ -409,3 +409,110 @@ The process-noise scale (Q) and the doubled measurement noise change almost noth
 `python scripts/analyse_final.py` rebuilds every table and figure above from the CSVs (`results/final_tables.md`, `results/figures/final/`), skipping any block that is missing. Blocks `adapt` (B and C-sweep with the dock-time tilt rule of C-info, tilt otherwise free: separates the dock rule from information-driven search) and `gaze` (head behaviour) are in `scripts/run_studies.sh`.
 
 `evaluation/search.gaze_metrics` adds five descriptors of the head to each new trial: `gaze_switch_per_min` (pan reversals), `gaze_dwell_med_s` (median time the world-frame gaze stays still), `gaze_toward_travel` (share of moving time looking within 0.6 rad of the direction of travel), `gaze_lead_s` (lag at which the pan best predicts the body's later heading change; exploratory, can sit at the 4 s edge of its search range) and `pan_std_rad`. They are descriptive cues in the sense used in the human-robot interaction literature on legible, goal-directed motion; they say nothing about how people perceive the robot, which would need participants.
+
+## Head camera profiles: the ideal camera and an Intel RealSense D435i
+
+`camera:` in the config picks the head camera. **`ideal`** (the default) is the camera every result above was collected
+with: a pinhole, 60 deg vertical field of view, 640 x 480, Gaussian pixel noise, no lens distortion, no blur, no delay.
+Selecting it reproduces those results bit for bit. **`d435i`** is the colour camera of an Intel RealSense D435i,
+simulated as a real camera. Any script with `--set` takes it: `watch_search.py`, `search_study.py`,
+`calibrate_camera.py`, `characterise_markers.py`, `check_markers.py`, `obstacle_diagnostic.py`, e.g.
+
+    python scripts/watch_search.py --set camera=d435i
+    python scripts/search_study.py --sensor camera --level large_6_pillars --set camera=d435i --dir results/d435i
+
+It changes the image the robot gets and what the robot knows about its camera, not the robot's algorithms.
+Only the colour stream is modelled: the D435i's stereo depth is not simulated and the robot stays monocular.
+
+**Image formation** (`sim/realsense.py`). MuJoCo renders an ideal pinhole image a little wider than the stream. It
+then goes through:
+1. Optics: resampled through the stream's intrinsics (848 x 480, fx = 609.3, fy = 609.0 px, principal point a
+   few pixels off centre) and Brown-Conrady lens distortion (mild barrel, about 6 px at the corners), then vignetting.
+2. Motion: rolling shutter (the rows are read over 20 ms) and motion blur (10 ms exposure), from the camera's angular
+   velocity. While the head pans at the gaze slew limit (1.5 rad/s) the image is blurred by about 9 px and skewed by
+   about 18 px from top to bottom.
+3. Sensor: Bayer RGGB colour filter, photon shot noise and read noise counted in electrons, 10-bit ADC.
+4. ISP: demosaicing (OpenCV edge-aware) and sRGB gamma.
+
+Light is handled as linear intensity (blur, vignetting, noise) and gamma-encoded at the end, as in a real camera.
+`results/figures/camera_profiles.png` (from `scripts/camera_profile_figure.py`) shows the camera on the head and the
+same scene through both profiles.
+
+**Timing.** Frames come out on a 30 Hz grid and are delivered 60 ms after capture. `DockingEnv` keeps the last
+states (one per control step) and renders a delivered frame from the state at its capture time. It uses a separate
+`MjData`, so the physics is untouched. A frame carries its capture time and the head encoder readings of that moment
+(`SensorBundle.image_t`, `image_pan`, `image_tilt`), as a driver's time stamps would. When the robot fuses a late
+frame, it carries the measurements into its current base frame with its own wheel odometry (`sensing/delay.py`).
+Without this, a 60 to 90 ms old frame taken while the robot turns in place would be off by several degrees.
+
+**What the robot knows** (`sensing/camera.py: camera_model`): image size, intrinsics, distortion, fields of view and
+the lens position on the head. ArUco PnP uses the distortion, floor ranging removes it before intersecting rays with
+the floor, and the gaze policies and synthetic sensors use the profile's horizontal field of view (69.7 deg instead of
+75.2 deg). The narrower vertical field of view (43.0 deg instead of 60 deg) matters most. At a level head the floor is
+visible only from 0.49 m (0.33 m with the ideal camera), and tall markers leave the image sooner.
+
+**Body.** The head's generic camera block is replaced (through `MjSpec`, in any scene) by the D435i body: 90 x 25 x
+25 mm, front glass, colour lens and the two IR windows 50 mm apart. The colour lens is on the front face, 12.5 mm
+ahead of the tilt axis and centred sideways. The centring is a simplification: on the module, the colour lens sits a
+few centimetres to one side. The head's mass and inertia are unchanged: 0.1 kg covers the 72 g camera and a bracket,
+and the servo's reflected inertia dominates the payload's.
+
+**Calibration** (`calibrate_camera.py --set camera=d435i`, 30 views). The calibrated focal lengths are 0.7 px from
+the profile, the principal point is within 0.3 px, and the distortion coefficients are recovered. The assumed and
+calibrated cameras differ by 0.5 px median (1.3 px max) over the image. Reprojection RMS is 0.087 px with
+distortion and 0.127 px as a pure pinhole: for this camera, modelling distortion matters, unlike for the ideal
+camera. The frame chain is unchanged (0.2 mm, 0.12 deg).
+
+**Marker characterisation** (`characterise_markers.py --set camera=d435i`, 300 poses, refined detections up to 5 m):
+
+| | range bias | range noise at 4-5 m | bearing noise | normal noise at 4-5 m |
+|---|---|---|---|---|
+| ideal camera | 0.0020 r^2 | 27 mm | 0.0020 rad | 4.3 deg |
+| D435i | 0.0033 r^2 | 17 mm | 0.0020 rad | 3.4 deg |
+
+The D435i sees the markers with more pixels per degree (narrower field of view), so its noise is at or below the
+ideal camera's. Its range bias is larger: blurring happens in linear light, and after the gamma the black square
+looks slightly smaller, so it looks farther. The profile's `set:` therefore refits only the EKF's range-bias
+correction (`ekf.range_bias_coeff=0.0033`). The noise model R, fitted to the ideal camera and then inflated, still
+bounds this camera's measured noise and is kept.
+
+**Datasheet values vs assumptions.** From the D435i datasheet: colour field of view 69 x 42 deg (+-3), 30 fps at this
+resolution, body size and mass, 50 mm stereo baseline, OV2740 colour sensor with 1.4 um pixels and 10-bit output.
+Assumed (typical values, marked in `configs/default.yaml`): the detailed intrinsics and distortion (every unit has its
+own factory calibration), exposure, readout time, latency, full well, read noise and vignetting. They are parameters
+and can be changed in the config.
+
+**First end-to-end check with the D435i (robot software unchanged).** `large_6_pillars`, the same seeds as the
+ideal-camera study, camera sensor, 300 s cap (`results/d435i/`):
+
+| config | ideal camera, seeds 0-4 | D435i |
+|---|---|---|
+| B | 5 / 5 docked | 1 / 4 (seeds 0-3): 3 timeouts |
+| C-sweep | 5 / 5 | 0 / 5: 3 timeouts, 2 false docks (yaw 33-39 deg) |
+| C-info | 5 / 5 | 0 / 5: 5 false docks (yaw 31-34 deg) |
+
+This is not a fault of the camera model. With its motion effects switched off (latency, exposure and readout set to
+0), the same C-info trial docks in 23 s, as with the ideal camera. Two real effects of the camera break docking logic
+that was tuned on the ideal camera:
+
+1. **Vertical field of view.** The dock marker's centre is at 0.25 m, so its black square reaches 0.40 m. At the
+   0.5 m stand-off, a level head sees up to 0.48 m with the ideal camera but only 0.39 m with the D435i (43 deg). B and
+   C-sweep lock the tilt at 0, so they cannot see the whole marker at the dock point. They time out, or dock only
+   when they stop a little farther back (B seed 3: 6.3 cm).
+2. **The camera turns while it looks.** While docking, the body turns in place at 0.4 rad/s and the head pans at up
+   to about 1.9 rad/s to keep the marker centred.
+   - The rolling shutter shears the marker, so its measured normal is off by about 5-10 deg, with a sign that
+     follows the turn. The marker is still detected in 90 % of frames up to 0.6 rad/s, 60-70 % at 1-1.5 rad/s and
+     30 % above.
+   - The EKF expects about 0.3 deg on the normal at 0.5 m (R was fitted on still views), so its gate rejects these
+     frames. The dock servo then gets an accepted view only about once a second. It acts on the last view for up
+     to 0.8 s, overshoots and swings by about +-40 deg.
+   - The finish test averages the last five views. Over a symmetric swing (-36, -18, +2, +20, +39 deg) the mean is
+     about 0, so it declares "docked" while 30-40 deg off.
+
+Possible changes to the robot, not made (to decide as a team):
+- measurement noise that grows with the camera's rotation rate, which the robot knows from the head encoders and
+  odometry;
+- a dock servo that stops and looks instead of acting on a stale view;
+- a finish test on every one of the last views, not their mean;
+- a dock tilt, stand-off or marker height compatible with a 43 deg vertical field of view for B and C-sweep.

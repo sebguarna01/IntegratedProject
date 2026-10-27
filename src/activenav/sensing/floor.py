@@ -94,5 +94,5 @@ class FloorRanger:
         return ObstacleScan(cam[:2].copy(), np.array(pts).reshape(-1, 2), np.array(hits, bool), np.array(sig))
 
     def scan_sb(self, sb) -> ObstacleScan:
-        """Scan the image of a SensorBundle with its measured head angles."""
-        return self.scan(sb.image, sb.pan, sb.tilt)
+        """Scan the image of a SensorBundle with the head angles measured when the image was taken."""
+        return self.scan(sb.image, sb.view_pan, sb.view_tilt)

@@ -67,7 +67,10 @@ class InfoSearchGaze:
     name = "C-info"
     CELL = 5                                   # search-memory cell = 5 map cells (0.25 m)
 
-    def __init__(self, cfg, pan_range=(-3.0, 3.0), hfov_deg: float = 75.2):
+    def __init__(self, cfg, pan_range=(-3.0, 3.0), hfov_deg: float | None = None):
+        if hfov_deg is None:                       # the camera profile's horizontal field of view
+            from activenav.sensing.camera import hfov_deg as camera_hfov_deg
+            hfov_deg = camera_hfov_deg(cfg)
         g = cfg["search"]["gaze"]
         self.tilt = float(cfg["search"]["tilt_search"])
         self.tilts = [float(v) for v in g.get("tilt_cands", [self.tilt])]

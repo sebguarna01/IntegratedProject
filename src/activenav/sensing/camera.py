@@ -1,5 +1,8 @@
-"""Camera and head: pinhole intrinsics and the pan-tilt forward kinematics (base frame to camera frame)."""
+"""Camera and head: intrinsics (the camera profile in use), and the pan-tilt forward kinematics (base frame to camera frame)."""
 from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Optional
 
 import numpy as np
 
@@ -16,6 +19,70 @@ def intrinsics_from_fovy(fovy_deg: float, width: int, height: int) -> np.ndarray
     return np.array([[f, 0.0, (width - 1) / 2.0],
                      [0.0, f, (height - 1) / 2.0],
                      [0.0, 0.0, 1.0]])
+
+
+@dataclass(frozen=True)
+class CameraModel:
+    """What the robot knows about its head camera: image size, intrinsics, lens distortion and where the lens sits on
+    the head. For the `ideal` profile these come from `camera_model.fovy_deg` and `sim.camera`, exactly as before;
+    for a real-camera profile (`cameras.<name>`) they are the values the device reports (its factory calibration)."""
+    name: str
+    width: int
+    height: int
+    K: np.ndarray
+    dist: Optional[np.ndarray]     # OpenCV k1 k2 p1 p2 k3, or None for a distortion-free pinhole
+    vfov: float                    # vertical field of view [rad]
+    hfov: float                    # horizontal field of view [rad]
+    head: dict                     # head geometry (config `head`, camera_offset = this camera's lens position)
+
+
+def camera_profile(cfg: dict) -> str:
+    """Name of the head camera profile in use: `ideal` (default) or a key of `cameras` (select with --set camera=d435i)."""
+    name = cfg.get("camera") or "ideal"
+    if name != "ideal" and name not in cfg.get("cameras", {}):
+        raise ValueError(f"unknown camera profile '{name}'. Available: ideal, {', '.join(cfg.get('cameras', {}))}")
+    return name
+
+
+def camera_model(cfg: dict) -> CameraModel:
+    """The head camera of the selected profile."""
+    name = camera_profile(cfg)
+    if name == "ideal":
+        cam, fovy = cfg["sim"]["camera"], float(cfg["camera_model"]["fovy_deg"])
+        W, H = int(cam["width"]), int(cam["height"])
+        return CameraModel(name, W, H, intrinsics_from_fovy(fovy, W, H), None, float(np.radians(fovy)),
+                           float(2.0 * np.arctan(np.tan(np.radians(fovy) / 2) * W / H)), cfg["head"])
+    p = cfg["cameras"][name]
+    W, H = int(p["width"]), int(p["height"])
+    K = np.array([[p["fx"], 0.0, p["cx"]], [0.0, p["fy"], p["cy"]], [0.0, 0.0, 1.0]], float)
+    head = dict(cfg["head"], camera_offset=[float(v) for v in p["lens_offset"]])
+    return CameraModel(name, W, H, K, np.asarray(p["dist"], float), float(2.0 * np.arctan(H / (2.0 * p["fy"]))),
+                       float(2.0 * np.arctan(W / (2.0 * p["fx"]))), head)
+
+
+def camera_settings(cfg: dict) -> list:
+    """Settings a real-camera profile changes elsewhere (`set: ["ekf.range_bias_coeff=...", ...]`, applied like --set
+    when a trial is built), e.g. the EKF's range-bias correction fitted to that camera. None for the ideal camera."""
+    name = camera_profile(cfg)
+    return [] if name == "ideal" else list(cfg["cameras"][name].get("set") or [])
+
+
+def hfov_deg(cfg: dict) -> float:
+    """Horizontal field of view [deg] that the gaze policies and synthetic sensors assume: 75.2 for the ideal camera
+    (the rounded value every earlier result was produced with), the profile's own value otherwise."""
+    m = camera_model(cfg)
+    return 75.2 if m.name == "ideal" else float(np.degrees(m.hfov))
+
+
+def pixel_rays(model: CameraModel, u, v) -> np.ndarray:
+    """Normalised camera rays (n, 3) [x, y, 1] (OpenCV camera frame) for pixels (u, v), lens distortion removed."""
+    u, v = np.atleast_1d(np.asarray(u, float)), np.atleast_1d(np.asarray(v, float))
+    if model.dist is None:
+        return (np.linalg.inv(model.K) @ np.vstack([u, v, np.ones_like(u)])).T
+    import cv2
+    xy = cv2.undistortPoints(np.stack([u, v], axis=1).reshape(-1, 1, 2), model.K, model.dist,
+                             criteria=(cv2.TERM_CRITERIA_COUNT | cv2.TERM_CRITERIA_EPS, 30, 1e-9)).reshape(-1, 2)
+    return np.column_stack([xy, np.ones(len(xy))])
 
 
 # -------------------- sensing/camera.py --------------------

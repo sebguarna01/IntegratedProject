@@ -1,6 +1,7 @@
 """Step 5: characterise the marker measurement error against range and viewing angle.
 
     python scripts/characterise_markers.py [--samples 300] [--noise 2.0]
+    python scripts/characterise_markers.py --set camera=d435i        # the RealSense D435i colour camera profile
 
 Random robot poses, with the head aimed roughly at a random marker. Every detection is
 compared to the true range, bearing and marker-normal direction, with and without sub-pixel
@@ -8,6 +9,7 @@ corner refinement. This is the evidence for the EKF measurement noise R (Criteri
 Ground truth is read only to score the measurements.
 
 Outputs: results/marker_characterisation.csv, results/figures/marker_characterisation.png
+(another camera profile: *_<profile>.csv / .png)
 """
 import argparse
 import csv
@@ -17,11 +19,11 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-from activenav.config import load_config
+from activenav.config import apply_overrides, load_config
 from activenav.kinematics import wrap_angle
 from activenav.sensing.markers import ArucoMarkerDetector
 from activenav.sensing.markers import measure_marker
-from activenav.sensing.camera import intrinsics_from_fovy
+from activenav.sensing.camera import camera_model
 from activenav.sensing.camera import camera_to_base
 from activenav.sim.env import DockingEnv
 from activenav.types import Command
@@ -52,22 +54,26 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--samples", type=int, default=300)
     ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--noise", type=float, default=None, help="override camera_model.image_noise_std")
+    ap.add_argument("--noise", type=float, default=None, help="override camera_model.image_noise_std (ideal camera)")
+    ap.add_argument("--set", nargs="*", default=[], metavar="KEY=VALUE", help="e.g. camera=d435i")
     args = ap.parse_args()
 
-    cfg = load_config()
+    cfg = apply_overrides(load_config(), args.set)
     if args.noise is not None:
         cfg["camera_model"]["image_noise_std"] = args.noise
     env = DockingEnv(cfg)
     markers = env.marker_map()
     ids = sorted(markers)
-    cam = cfg["sim"]["camera"]
-    K = intrinsics_from_fovy(cfg["camera_model"]["fovy_deg"], cam["width"], cam["height"])
+    cam = camera_model(cfg)
+    suffix = "" if cam.name == "ideal" else f"_{cam.name}"
     size = cfg["perception"]["marker_size_m"]
-    detectors = {"plain": ArucoMarkerDetector(K, size, refine=False),
-                 "refined": ArucoMarkerDetector(K, size, refine=True)}
+    detectors = {"plain": ArucoMarkerDetector(cam.K, size, dist_coeffs=cam.dist, refine=False),
+                 "refined": ArucoMarkerDetector(cam.K, size, dist_coeffs=cam.dist, refine=True)}
     rng = np.random.default_rng(args.seed)
-    print(f"image noise std = {cfg['camera_model']['image_noise_std']} gray levels")
+    if cam.name == "ideal":
+        print(f"image noise std = {cfg['camera_model']['image_noise_std']} gray levels")
+    else:
+        print(f"camera profile {cam.name}: {cam.width} x {cam.height}, image formation in sim/realsense.py")
 
     rows, views_with_detection = [], 0
     for k in range(args.samples):
@@ -81,7 +87,7 @@ def main():
         for _ in range(50):
             env.step(Command(pan_target=pan, tilt_target=tilt))
         s = env.step(Command(pan_target=pan, tilt_target=tilt), render=True)
-        T_B_C = camera_to_base(cfg["head"], s.pan, s.tilt)
+        T_B_C = camera_to_base(cam.head, s.view_pan, s.view_tilt)
         gt = env.ground_truth()
 
         found = False
@@ -108,7 +114,7 @@ def main():
     print(f"{views_with_detection} of {args.samples} views had at least one detection; "
           f"{sum(r['method'] == 'refined' for r in rows)} refined detections")
     out = cfg["_root"] / "results"
-    with open(out / "marker_characterisation.csv", "w", newline="") as f:
+    with open(out / f"marker_characterisation{suffix}.csv", "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
         w.writeheader()
         w.writerows(rows)
@@ -142,9 +148,9 @@ def main():
     for a in ax.ravel():
         a.grid(True)
     fig.tight_layout()
-    path = out / "figures" / "marker_characterisation.png"
+    path = out / "figures" / f"marker_characterisation{suffix}.png"
     fig.savefig(path, dpi=140)
-    print(f"\nsaved results/marker_characterisation.csv and {path.relative_to(cfg['_root'])}")
+    print(f"\nsaved results/marker_characterisation{suffix}.csv and {path.relative_to(cfg['_root'])}")
 
 
 if __name__ == "__main__":

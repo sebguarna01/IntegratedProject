@@ -37,8 +37,11 @@ def rdir(args, cfg):
 
 
 def layout_name(args, dock_height=None):
+    # a camera profile other than the ideal one is part of the label, so its rows never mix with the ideal camera's
+    cam = getattr(args, "camera", "ideal")
     return ("randmk" if args.random_markers else "fixed") + ("+randdock" if args.random_dock else "") + \
-        ("+heights" if args.heights else "") + (f"+dock{dock_height:g}" if dock_height is not None else "")
+        ("+heights" if args.heights else "") + (f"+dock{dock_height:g}" if dock_height is not None else "") + \
+        ("" if cam == "ideal" else f"+{cam}")
 
 
 def run(args, cfg):
@@ -135,6 +138,8 @@ def main():
     ap.add_argument("--set", nargs="*", default=[], metavar="KEY=VALUE")
     args = ap.parse_args()
     apply_overrides(cfg, args.set)
+    from activenav.sensing.camera import camera_profile
+    args.camera = camera_profile(cfg)                      # head camera profile (--set camera=d435i)
     if args.repair:
         from activenav.evaluation.stats import repair
         for path in sorted(rdir(args, cfg).glob(f"search_study_{args.sensor}*.csv")):

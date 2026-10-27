@@ -8,6 +8,7 @@ from activenav.autonomy.obstacle_sensor import GroundGeometry
 from activenav.autonomy.obstacle_sensor import ObstacleScan
 from activenav.geometry import marker_fully_visible
 from activenav.kinematics import wrap_angle
+from activenav.sensing.camera import hfov_deg as camera_hfov_deg
 from activenav.types import MarkerMeasurement, SensorBundle
 
 
@@ -20,9 +21,11 @@ _NORMAL_STD_DEG = [0.19, 0.30, 0.91, 1.45, 6.6]
 class SyntheticMarkerSensor:
     needs_image = False
 
-    def __init__(self, env, rng: np.random.Generator, hfov_deg: float = 75.2,
+    def __init__(self, env, rng: np.random.Generator, hfov_deg: float | None = None,
                  max_range: float = 5.0, max_view_deg: float = 75.0, marker_ids=None, occlusion: bool = True,
                  cfg: dict | None = None):
+        if hfov_deg is None:                                               # the camera profile's (75.2 deg without a config)
+            hfov_deg = camera_hfov_deg(cfg) if cfg is not None else 75.2
         self.env, self.rng = env, rng
         self.obstacles = env.obstacle_map() if occlusion else []      # pillars hide markers (exact 2D line-of-sight test)
         self.markers = {k: v for k, v in env.marker_map().items() if marker_ids is None or k in marker_ids}
@@ -100,7 +103,9 @@ def _ray_obstacle(o, d, p):
 class SyntheticObstacleSensor:
     needs_image = False
 
-    def __init__(self, env, rng: np.random.Generator, cfg: dict, hfov_deg: float = 75.2):
+    def __init__(self, env, rng: np.random.Generator, cfg: dict, hfov_deg: float | None = None):
+        if hfov_deg is None:
+            hfov_deg = camera_hfov_deg(cfg)
         self.env, self.rng = env, rng
         self.geo = GroundGeometry(cfg)
         o = cfg["obstacles"]

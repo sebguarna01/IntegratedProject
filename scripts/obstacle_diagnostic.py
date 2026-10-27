@@ -54,7 +54,9 @@ def main():
     geo = GroundGeometry(cfg)
     rng = np.random.default_rng(args.seed)
     x0, x1, y0, y1 = env.room_bounds()
-    out = cfg["_root"] / "results" / "obstacle_diag"
+    from activenav.sensing.camera import camera_profile
+    cam_name = camera_profile(cfg)                    # another camera profile writes to its own folder
+    out = cfg["_root"] / "results" / ("obstacle_diag" if cam_name == "ideal" else f"obstacle_diag_{cam_name}")
     out.mkdir(parents=True, exist_ok=True)
     rows, sheet = [], []
     maxr = float(cfg["obstacles"]["max_range"])
@@ -76,7 +78,7 @@ def main():
                 sb = env.step(Command(0.0, 0.0, 0.0, tilt), render=True)
                 img = sb.image
                 fr = FloorRanger(cfg)
-                scan = fr.scan(img, sb.pan, sb.tilt)
+                scan = fr.scan(img, sb.view_pan, sb.view_tilt)       # head angles when the image was taken
             x, y, th = env.ground_truth()
             c, s = np.cos(th), np.sin(th)
             o_w = np.array([x, y]) + np.array([[c, -s], [s, c]]) @ scan.origin
@@ -93,7 +95,7 @@ def main():
                 for j, col in enumerate(fr.last_cols):
                     m[:, max(0, col - 2):col + 3] = np.where(fr.last_mask[:, j], 255, 0)[:, None]
                 vis[m == 255] = (0.6 * vis[m == 255] + 0.4 * np.array([0, 200, 0])).astype(np.uint8)
-                sheet.append(cv2.resize(vis, (320, 240)))
+                sheet.append(cv2.resize(vis, (320, int(round(320 * geo.H / geo.W)))))
 
     with open(out / "obstacle_diag.csv", "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=list(rows[0]))
