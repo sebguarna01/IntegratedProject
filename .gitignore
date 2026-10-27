@@ -11,3 +11,4 @@ models/_generated_*.xml
 results/*.bak
 *.zip
 models/assets/_generated_*
+*.log
