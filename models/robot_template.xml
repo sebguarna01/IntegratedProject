@@ -1,0 +1,110 @@
+<mujoco model="generated_scene">
+  <!-- TurtleBot3 Waffle Pi (from robotis_mujoco_menagerie) + pan-tilt camera head + test room.
+       Changes from the original robot XML:
+         1. LiDAR (lds) meshes removed: camera-only project.
+         2. Pan-tilt head and RGB camera "head_cam" added on the top plate.
+         3. Floor, walls, ArUco markers and pillars are generated from configs/default.yaml (see sim/scene_builder.py).
+       Frame conventions: robot forward = +x, left = +y, up = +z.
+       head_pan: + = counter-clockwise (look left). head_tilt: + = look DOWN. -->
+  <compiler angle="radian" meshdir="assets/" texturedir="assets/"/>
+  <option cone="elliptic" impratio="10"/>
+
+  <visual>
+    <global offwidth="1280" offheight="960"/>
+    <headlight ambient="0.5 0.5 0.5" diffuse="0.5 0.5 0.5" specular="0 0 0"/>
+  </visual>
+
+  <asset>
+    <material name="grey" rgba="0.3 0.3 0.3 1"/>
+    <material name="black" rgba="0.1 0.1 0.1 1"/>
+    <material name="floor" rgba="0.72 0.72 0.72 1" specular="0" shininess="0" reflectance="0"/>
+    <material name="wall" rgba="0.92 0.9 0.85 1" specular="0" shininess="0" reflectance="0"/>
+    <material name="head" rgba="0.95 0.95 0.9 1"/>
+
+    <texture name="sky" type="skybox" builtin="flat" rgb1="0.82 0.86 0.9" rgb2="0.82 0.86 0.9" width="32" height="32"/>
+
+    <!--@SCENE_ASSETS@-->
+
+    <mesh name="waffle_pi_base" file="waffle_pi_base.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="left_tire" file="left_tire.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="right_tire" file="right_tire.stl" scale="0.001 0.001 0.001"/>
+  </asset>
+
+  <default>
+    <default class="wheel">
+      <joint limited="false" frictionloss="0.005" armature="0.01"/>
+      <velocity kv="1.0" ctrlrange="-7.88 7.88" ctrllimited="true" forcerange="-1 1" forcelimited="true"/>
+      <default class="wheel_left">
+        <joint axis="0 0 1"/>
+      </default>
+      <default class="wheel_right">
+        <joint axis="0 0 1"/>
+      </default>
+    </default>
+    <default class="visual">
+      <geom type="mesh" contype="0" conaffinity="0" density="0" group="2"/>
+    </default>
+    <default class="collision">
+      <geom group="3" type="mesh"/>
+    </default>
+  </default>
+
+  <worldbody>
+    <!--@SCENE_WORLD@-->
+
+    <!-- Robot -->
+    <body name="base" pos="1 -0.5 0.002">
+      <inertial pos="-0.064 0 0.06" mass="1.8" diaginertia="0.01 0.01 0.008"/>
+      <joint type="free" name="base_joint"/>
+      <geom pos="-0.064 0 0.01" mesh="waffle_pi_base" material="black" class="visual"/>
+      <!-- Collision: simple box instead of the mesh hull. The hull reached the floor and carried ~7 N of the
+           robot weight, dragging on the ground. The box sits 3 cm above the floor with low friction. -->
+      <geom class="collision" type="box" pos="-0.064 0 0.07" size="0.14 0.15 0.04" friction="0.1 0.005 0.0001"/>
+      <!-- Rear casters: priority="1" makes MuJoCo use THEIR friction/condim for floor contact. Without it the
+           contact takes the MAX friction of the two geoms (the floor, mu=1), so the casters dragged like pegs. -->
+      <geom size="0.005" pos="-0.177 -0.064 0.005" type="sphere" material="grey" friction="0.0001 0.0001 0.0001" solref="0.02 1" solimp="0.95 0.99 0.001" condim="1" priority="1"/>
+      <geom size="0.005" pos="-0.177 0.064 0.005" type="sphere" material="grey" friction="0.0001 0.0001 0.0001" solref="0.02 1" solimp="0.95 0.99 0.001" condim="1" priority="1"/>
+      <geom size="0.0075 0.015 0.0135" pos="0.078 0 0.107" type="box" material="grey"/>
+
+      <!-- Pan-tilt head (replaces the LiDAR position on the top plate) -->
+      <body name="head_pan" pos="-0.049 0 0.1255">
+        <inertial pos="0 0 0.02" mass="0.05" diaginertia="2e-4 2e-4 1e-4"/>
+        <joint name="head_pan" type="hinge" axis="0 0 1" limited="true" range="-3.0 3.0"/>
+        <geom class="visual" type="cylinder" size="0.012 0.03" pos="0 0 0.03" material="grey"/>
+        <body name="head_tilt" pos="0 0 0.065">
+          <inertial pos="0 0 0" mass="0.1" diaginertia="5e-4 5e-4 5e-4"/>
+          <joint name="head_tilt" type="hinge" axis="0 1 0" limited="true" range="-0.6 1.0"/>
+          <geom class="visual" type="box" size="0.02 0.03 0.02" pos="0 0 0" material="head"/>
+          <!-- MuJoCo cameras look along their -z axis. This frame makes the camera look along the
+               tilt body's +x axis, image-right = -y, image-up = +z. -->
+          <camera name="head_cam" pos="0.022 0 0" xyaxes="0 -1 0 0 0 1" fovy="60"/>
+        </body>
+      </body>
+
+      <body name="wheel_left" pos="0 0.144 0.033" quat="0.707388 -0.706825 0 0">
+        <inertial pos="0 0 0" quat="-0.000890159 0.706886 0.000889646 0.707326" mass="0.0284989" diaginertia="2.07126e-05 1.11924e-05 1.11756e-05"/>
+        <joint name="wheel_left" class="wheel_left"/>
+        <geom quat="0.707388 0.706825 0 0" mesh="left_tire" material="grey" class="visual"/>
+        <geom quat="0.707388 0.706825 0 0" mesh="left_tire" class="collision"/>
+      </body>
+      <body name="wheel_right" pos="0 -0.144 0.033" quat="0.707388 -0.706825 0 0">
+        <inertial pos="0 0 0" quat="-0.000890159 0.706886 0.000889646 0.707326" mass="0.0284989" diaginertia="2.07126e-05 1.11924e-05 1.11756e-05"/>
+        <joint name="wheel_right" class="wheel_right"/>
+        <geom quat="0.707388 0.706825 0 0" mesh="right_tire" material="grey" class="visual"/>
+        <geom quat="0.707388 0.706825 0 0" mesh="right_tire" class="collision"/>
+      </body>
+    </body>
+  </worldbody>
+
+  <actuator>
+    <velocity class="wheel_left" name="wheel_left" joint="wheel_left"/>
+    <velocity class="wheel_right" name="wheel_right" joint="wheel_right"/>
+    <position name="head_pan" joint="head_pan" kp="1" kv="0.05" ctrllimited="true" ctrlrange="-3.0 3.0"/>
+    <position name="head_tilt" joint="head_tilt" kp="1" kv="0.05" ctrllimited="true" ctrlrange="-0.6 1.0"/>
+  </actuator>
+
+  <contact>
+    <exclude body1="base" body2="wheel_left"/>
+    <exclude body1="base" body2="wheel_right"/>
+  </contact>
+</mujoco>
