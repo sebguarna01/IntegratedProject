@@ -106,22 +106,65 @@ class ColorCamera:
         return self._lut_out[cv2.cvtColor(dn, self._demosaic)]
 
 
+def _add(body, name, kind, size, pos, rgba, quat=None):
+    """A visual-only geom (no collision, no mass: the head's inertia is set in the XML, so physics is unchanged)."""
+    g = body.add_geom()
+    g.name, g.type, g.size, g.pos, g.rgba = name, kind, size, pos, rgba
+    if quat is not None:
+        g.quat = quat
+    g.contype, g.conaffinity, g.group, g.density = 0, 0, 2, 0.0
+
+
+_BOX, _CYL = mujoco.mjtGeom.mjGEOM_BOX, mujoco.mjtGeom.mjGEOM_CYLINDER
+_ALONG_X = [np.cos(np.pi / 4), 0.0, np.sin(np.pi / 4), 0.0]                  # cylinder axis (z) turned onto x
+_ALONG_Y = [np.cos(np.pi / 4), -np.sin(np.pi / 4), 0.0, 0.0]                 # cylinder axis (z) turned onto y
+# ROBOTIS Dynamixel XL430-W250 (the servo family of the TurtleBot3): 28.5 x 46.5 x 34 mm; output horn ~11 mm from one end
+_SERVO = (0.0465, 0.0285, 0.034)                                             # long side, short side, along the horn axis [m]
+_HORN_FROM_END = 0.0113
+_SERVO_RGBA, _HORN_RGBA, _BRACKET_RGBA = [0.07, 0.07, 0.08, 1], [0.72, 0.72, 0.74, 1], [0.60, 0.61, 0.64, 1]
+
+
+def build_pan_tilt(spec: mujoco.MjSpec, cam_width: float) -> None:
+    """Replace the head's placeholder post with a two-servo pan-tilt unit, around the SAME joint axes (visual only).
+
+    Pan: a Dynamixel XL430 lying on the top plate, horn up on the pan axis, its body reaching back. On its horn, an
+    aluminium U-bracket turns with the pan; its two arms rise beside the camera up to the tilt axis. Tilt: a second
+    XL430 bolted to the outside of one arm, horn on the tilt axis, driving the camera through a side plate; an idler
+    bearing on the other arm. The bracket width follows the camera (`cam_width`)."""
+    base, pan, tilt = spec.body("base"), spec.body("head_pan"), spec.body("head_tilt")
+    for g in list(pan.geoms):                                                 # the old post
+        spec.delete(g)
+    po = np.array(pan.pos, float)                                             # pan axis on the plate, base frame
+    tz = float(np.array(tilt.pos, float)[2])                                  # tilt axis height above the pan origin
+    L, S, H = _SERVO
+    back = L / 2 - _HORN_FROM_END                                             # servo centre behind its horn axis
+    # pan servo, fixed to the robot: lying on the plate, horn axis = pan axis
+    _add(base, "pan_servo", _BOX, [L / 2, S / 2, H / 2], list(po + [-back, 0.0, H / 2]), _SERVO_RGBA)
+    # turning with the pan: horn, U-bracket (plate + two arms), tilt servo, idler
+    _add(pan, "pan_horn", _CYL, [0.0125, 0.00125, 0], [0, 0, H + 0.00125], _HORN_RGBA)
+    gap, t = cam_width / 2 + 0.006, 0.0025                                    # half the inner width, plate thickness
+    z0, z1 = H + 0.0025, tz + 0.014                                           # bracket from the horn up past the tilt axis
+    _add(pan, "bracket_plate", _BOX, [0.016, gap + t, t / 2], [0, 0, z0 + t / 2], _BRACKET_RGBA)
+    for i, s in enumerate((-1, 1)):
+        _add(pan, f"bracket_arm_{i}", _BOX, [0.012, t / 2, (z1 - z0) / 2], [0, s * (gap + t / 2), (z0 + z1) / 2], _BRACKET_RGBA)
+    _add(pan, "tilt_servo", _BOX, [L / 2, H / 2, S / 2], [-back, gap + t + H / 2, tz], _SERVO_RGBA)
+    _add(pan, "tilt_servo_horn", _CYL, [0.0125, 0.00125, 0], [0, gap - 0.00125, tz], _HORN_RGBA, _ALONG_Y)
+    _add(pan, "idler", _CYL, [0.006, 0.002, 0], [0, -(gap + t + 0.002), tz], [0.15, 0.15, 0.16, 1], _ALONG_Y)
+    # turning with the tilt: the plates that hold the camera on the horn and on the idler
+    for i, s in enumerate((-1, 1)):
+        _add(tilt, f"camera_plate_{i}", _BOX, [0.012, 0.0015, 0.011], [0, s * (cam_width / 2 + 0.002), 0], _BRACKET_RGBA)
+
+
 def mount_on_head(spec: mujoco.MjSpec, p: dict, render_fovy: float, render_w: int, render_h: int) -> None:
-    """Replace the head's generic camera block with the D435i body (front glass, colour lens, IR windows) and make
-    `head_cam` the colour lens: its position on the head and the render camera's field of view."""
+    """Replace the head's generic camera block with the camera body (front glass, colour lens, IR windows) on a
+    two-servo pan-tilt unit, and make `head_cam` the colour lens: its position on the head and the render camera's
+    field of view."""
     body = spec.body("head_tilt")
     for g in list(body.geoms):
         spec.delete(g)
     dx, wy, hz = (float(v) for v in p["body_size"])                         # depth, width, height [m]
-
-    def add(name, kind, size, pos, rgba, quat=None):
-        g = body.add_geom()
-        g.name, g.type, g.size, g.pos, g.rgba = name, kind, size, pos, rgba
-        if quat is not None:
-            g.quat = quat
-        g.contype, g.conaffinity, g.group, g.density = 0, 0, 2, 0.0            # visual only: the head inertia is set in the XML
-    box, cyl = mujoco.mjtGeom.mjGEOM_BOX, mujoco.mjtGeom.mjGEOM_CYLINDER
-    along_x = [np.cos(np.pi / 4), 0.0, np.sin(np.pi / 4), 0.0]                 # cylinder axis (z) turned onto x
+    add = lambda *a: _add(body, *a)
+    box, cyl, along_x = _BOX, _CYL, _ALONG_X
     add("d435i_body", box, [dx / 2, wy / 2, hz / 2], [0, 0, 0], [0.20, 0.20, 0.22, 1])
     add("d435i_glass", box, [0.0008, wy / 2 - 0.002, hz / 2 - 0.002], [dx / 2 + 0.0008, 0, 0], [0.02, 0.02, 0.025, 1])
     lens = [float(v) for v in p["lens_offset"]]
@@ -130,6 +173,7 @@ def mount_on_head(spec: mujoco.MjSpec, p: dict, render_fovy: float, render_w: in
     for i, side in enumerate((-1, 1)):                                     # the two IR imagers of the stereo pair
         yi = side * float(p["stereo_baseline_m"]) / 2
         add(f"d435i_ir_{i}", cyl, [0.0055, 0.0006, 0], [front + 0.0006, yi, 0], [0.10, 0.04, 0.05, 1], along_x)
+    build_pan_tilt(spec, wy)
     cam = spec.camera("head_cam")
     cam.pos, cam.fovy = lens, float(render_fovy)
     spec.visual.global_.offwidth = max(int(spec.visual.global_.offwidth), int(render_w))

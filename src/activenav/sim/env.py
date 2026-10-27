@@ -225,6 +225,8 @@ class DockingEnv:
         if r is None or (r.height, r.width) != (height, width):
             if r is not None:
                 r.close()
+            g = self.model.vis.global_                  # a large window: grow the offscreen buffer (visual setting only)
+            g.offwidth, g.offheight = max(int(g.offwidth), int(width)), max(int(g.offheight), int(height))
             r = self._free_renderer = mujoco.Renderer(self.model, height=height, width=width)
             self._free_cam = mujoco.MjvCamera()
             self._free_cam.type = mujoco.mjtCamera.mjCAMERA_FREE

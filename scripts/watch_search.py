@@ -16,7 +16,8 @@ Right: the head camera, and below it the map the robot is building in its OWN st
 dark obstacle), landmarks it found (marker 10 red), its path and frontier target (star), belief (orange with 2 sigma
 ellipse) and the head's field of view. `t` overlays the true room (green) so you can judge the map. Configs: 1 B
 (fixed head), 2 C-sweep, 3 C-info. Quitting (or a video finishing) writes results/watch_search_*.csv.
-The window is shrunk to fit the screen if needed (Windows; --scale sets it by hand).
+The window opens shrunk to fit the screen if needed (Windows; --scale sets it by hand) and can be resized or maximised:
+the panels are laid out again at the window's size, so the 3D view, camera and map grow and the text stays sharp.
 Keys: space pause | + / - speed | r restart | n / p seed | 1-3 config | l level | m random markers | d random dock | h marker heights |
       t truth | f follow robot | o view from above | z / x zoom | v record | s screenshot | q quit
 """
@@ -117,19 +118,41 @@ def main():
         sz = screen_size()
         scale = min(1.0, sz[0] / fw, sz[1] / fh) if sz else 1.0
     win = "Active visual navigation: search and dock"
-    cv2.namedWindow(win, cv2.WINDOW_AUTOSIZE)
+    resizable = w.free                            # the 3D-view layout follows the window (maximise, drag the border)
+    if resizable:
+        cv2.namedWindow(win, cv2.WINDOW_NORMAL | cv2.WINDOW_FREERATIO)
+        fw, fh = w.frame_size()
+        cv2.resizeWindow(win, int(fw * scale), int(fh * scale))
+        w.set_size(int(fw * scale), int(fh * scale))
+        applied = (int(fw * scale), int(fh * scale))
+        scale = 1.0                               # frames are composed at the window's size: no scaling to undo
+    else:
+        cv2.namedWindow(win, cv2.WINDOW_AUTOSIZE)
     # the mouse drives the 3D view; undo the window scale so the viewer gets frame pixels
     cv2.setMouseCallback(win, lambda event, x, y, flags, _: w.mouse(event, x / scale, y / scale, flags))
+    pending, since = None, 0.0
     last = time.perf_counter()
     while True:
         now = time.perf_counter()
+        if resizable:                             # re-lay the panels once the window size has settled (not while dragging)
+            try:
+                size = tuple(cv2.getWindowImageRect(win)[2:])
+            except cv2.error:
+                size = (0, 0)
+            if min(size) > 0 and size != applied:
+                if size != pending:
+                    pending, since = size, now
+                elif now - since > 0.25:
+                    w.set_size(*size)
+                    applied, pending = size, None
         w.advance(now - last)
         last = now
         full = w.compose()
         frame = full if scale == 1.0 else cv2.resize(full, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
         cv2.imshow(win, frame)
-        if w.writer is not None:
-            w.writer.write(full)
+        if w.writer is not None:                  # a video keeps the size it started with
+            ws = w.writer_size
+            w.writer.write(full if (full.shape[1], full.shape[0]) == ws else cv2.resize(full, ws, interpolation=cv2.INTER_AREA))
         k = cv2.waitKey(1) & 0xFF
         if k != 255 and not w.handle_key(k):
             break

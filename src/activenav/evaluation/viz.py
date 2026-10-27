@@ -161,6 +161,10 @@ class SearchWatcher:
         # 3D view (draw_free): camera state, whether it follows the robot, the room it was framed on, mouse drag
         self.free, self.follow, self.free_ok = free, False, True
         self.view, self._view_env, self._drag, self._mouse = None, None, None, (-1, -1)
+        self._moved = False                       # the user moved the 3D view (a window resize then keeps it as it is)
+        # panel sizes of the 3D-view layout (set_size lays them out over the window; these are the native ones)
+        self.fw, self.fh, self.ih, self.sw, self.sch, self.smh = FREE_W, FREE_H, INFO_H, SIDE_W, SIDE_CAM_H, SIDE_MAP_H
+        self.writer_size = None
         self.camera_sensor = None
         if sensor == "camera":
             from activenav.sensing.markers import MarkerSensor
@@ -319,10 +323,27 @@ class SearchWatcher:
         wide = x1 - x0 >= y1 - y0
         across, along = (x1 - x0, y1 - y0) if wide else (y1 - y0, x1 - x0)
         # the wall tops are the closest to the camera, so they set the framing
-        d = room["height"] + max((across / 2 + FREE_PAD) * FREE_H / FREE_W, along / 2 + FREE_PAD) / t
+        d = room["height"] + max((across / 2 + FREE_PAD) * self.fh / self.fw, along / 2 + FREE_PAD) / t
         self.view = dict(lookat=np.array([(x0 + x1) / 2, (y0 + y1) / 2, 0.0]), distance=float(d),
                          azimuth=90.0 if wide else 180.0, elevation=-90.0)   # 90: +x right, +y up; 180: +y right, +x down
-        self.follow = False
+        self.follow, self._moved = False, False
+
+    def set_size(self, width: int, height: int):
+        """Lay the 3D-view layout out over a window of width x height pixels, with the native proportions (3D view 780 of
+        1340 px wide and 585 of 774 px high, head camera 420 of 774 px high). Every panel is then drawn at its own size,
+        so a larger window shows more, sharply (no stretching). The 3D view is re-framed unless the user moved it."""
+        W, H = max(int(width), 640), max(int(height), 400)
+        self.fw = int(round(W * FREE_W / (FREE_W + SIDE_W)))
+        self.sw = W - self.fw
+        self.fh = int(round(H * FREE_H / (FREE_H + INFO_H)))
+        self.ih = H - self.fh
+        self.sch = int(round(H * SIDE_CAM_H / (SIDE_CAM_H + SIDE_MAP_H)))
+        self.smh = H - self.sch
+        if self.view is not None and not self._moved:
+            follow = self.follow
+            self.reset_view()
+            if follow:
+                self.start_follow()
 
     def start_follow(self):
         """Keep the robot in the centre and come closer; the viewing angle stays as it is."""
@@ -331,15 +352,17 @@ class SearchWatcher:
 
     def zoom(self, notches):
         self.view["distance"] = float(np.clip(self.view["distance"] * 0.85 ** notches, 0.6, 300.0))
+        self._moved = True
 
     def drag(self, mode, dx, dy):
         """Mouse drag of (dx, dy) pixels on the 3D view."""
         v = self.view
+        self._moved = True
         if mode == "rotate":                       # orbit the look-at point (MuJoCo viewer convention)
             v["azimuth"] = (v["azimuth"] - 0.3 * dx) % 360.0
             v["elevation"] = float(np.clip(v["elevation"] - 0.3 * dy, -90.0, -5.0))
         elif mode == "move":                       # slide over the floor: the scene follows the pointer
-            mpp = 2.0 * self._clear_distance(v) * np.tan(np.radians(FREE_FOVY) / 2) / FREE_H   # metres per pixel at the look-at point
+            mpp = 2.0 * self._clear_distance(v) * np.tan(np.radians(FREE_FOVY) / 2) / self.fh  # metres per pixel at the look-at point
             a = np.radians(v["azimuth"])
             ahead, right = np.array([np.cos(a), np.sin(a), 0.0]), np.array([np.sin(a), -np.cos(a), 0.0])
             v["lookat"] = v["lookat"] + (dy * ahead - dx * right) * mpp
@@ -351,7 +374,7 @@ class SearchWatcher:
         """Mouse event at (x, y) in frame pixels (the window's scale already undone). Acts on the 3D view only."""
         if not self.free or self.view is None:
             return
-        inside = 0 <= x < FREE_W and 0 <= y < FREE_H
+        inside = 0 <= x < self.fw and 0 <= y < self.fh
         if event == cv2.EVENT_MOUSEMOVE:
             if self._drag:
                 self.drag(self._drag, x - self._mouse[0], y - self._mouse[1])
@@ -369,7 +392,7 @@ class SearchWatcher:
             self.reset_view()
         elif event == cv2.EVENT_MOUSEWHEEL:
             mx, my = self._mouse                   # Windows reports the wheel in screen coordinates: use the last pointer position
-            if 0 <= mx < FREE_W and 0 <= my < FREE_H:
+            if 0 <= mx < self.fw and 0 <= my < self.fh:
                 self.zoom(wheel_delta(flags))
 
     # ------------------------------------------------------------------ output
@@ -380,7 +403,7 @@ class SearchWatcher:
 
     def frame_size(self):
         """(width, height) of compose()."""
-        return (FREE_W + SIDE_W, FREE_H + INFO_H) if self.free else (CAM_W + MAP_W, CAM_H + HUD_H)
+        return (self.fw + self.sw, self.fh + self.ih) if self.free else (CAM_W + MAP_W, CAM_H + HUD_H)
 
     def screenshot(self):
         p = self._out("screenshots") / time.strftime(f"search_{self.conf}_s{self.seed}_%H%M%S.png")
@@ -394,7 +417,8 @@ class SearchWatcher:
             print("recording stopped")
             return
         p = self._out("videos") / time.strftime(f"search_{self.conf}_s{self.seed}_%H%M%S.mp4")
-        self.writer = cv2.VideoWriter(str(p), cv2.VideoWriter_fourcc(*"mp4v"), 20.0, self.frame_size())
+        self.writer_size = self.frame_size()                     # a video keeps its size if the window is resized meanwhile
+        self.writer = cv2.VideoWriter(str(p), cv2.VideoWriter_fourcc(*"mp4v"), 20.0, self.writer_size)
         print("recording to", p)
 
     def save_log(self):
@@ -556,8 +580,9 @@ class SearchWatcher:
             cv2.rectangle(img, (0, 0), (CAM_W + MAP_W - 1, HUD_H - 1), (0, 0, 220), 3)
         return img
 
-    def draw_info(self, pw=FREE_W, ph=INFO_H):
+    def draw_info(self, pw=None, ph=None):
         """Status panel of the 3D-view layout: the same lines as the status bar, wrapped to the panel, plus the mouse."""
+        pw, ph = pw or self.fw, ph or self.ih
         s, a = self.session, self.session.agent
         img = np.full((ph, pw, 3), 28, np.uint8)
         lines = []
@@ -576,7 +601,7 @@ class SearchWatcher:
         if not self.free:
             return np.vstack([np.hstack([self.draw_camera(), self.draw_map()]), self.draw_hud()])
         left = np.vstack([self.draw_free(), self.draw_info()])
-        right = np.vstack([self.draw_camera(SIDE_W, SIDE_CAM_H), self.draw_map(SIDE_W, SIDE_MAP_H)])
+        right = np.vstack([self.draw_camera(self.sw, self.sch), self.draw_map(self.sw, self.smh)])
         return np.hstack([left, right])
 
     # ---------------------------------------------------------------- 3D view
@@ -598,7 +623,7 @@ class SearchWatcher:
         """True path, robot, head field of view and marker ids, drawn only where the 3D render shows them (depth test;
         depth None: no test, used when looking straight down, where nothing on the floor hides behind a wall)."""
         s, a, room = self.session, self.session.agent, self._room_geometry()
-        P = lambda pts: project(cam, pts, FREE_W, FREE_H, depth)
+        P = lambda pts: project(cam, pts, self.fw, self.fh, depth)
         x, y, yaw = self.env.ground_truth()
         # head camera field of view on the floor: the same wedge as on the map, at the TRUE pose, cut at the walls;
         # only floor pixels are tinted, so pillars, people and walls in front of it stay as they are
@@ -611,13 +636,13 @@ class SearchWatcher:
             reach = min(R, (fx1 - x) / c if c > 1e-9 else np.inf, (fx0 - x) / c if c < -1e-9 else np.inf,
                         (fy1 - y) / sn if sn > 1e-9 else np.inf, (fy0 - y) / sn if sn < -1e-9 else np.inf)
             pts.append((x + reach * c, y + reach * sn, 0.0))
-        uv, ok = project(cam, pts, FREE_W, FREE_H)                         # no depth test: the wedge is a floor area
+        uv, ok = project(cam, pts, self.fw, self.fh)                         # no depth test: the wedge is a floor area
         if ok.all():
             mask = np.zeros(img.shape[:2], np.uint8)
             cv2.fillPoly(mask, [uv], 1)
             ys, xs = np.nonzero(mask)
             if depth is not None:
-                floor = np.abs(surface_height(cam, xs, ys, depth, FREE_W, FREE_H)) < 0.03
+                floor = np.abs(surface_height(cam, xs, ys, depth, self.fw, self.fh)) < 0.03
                 ys, xs = ys[floor], xs[floor]
             img[ys, xs] = (0.82 * img[ys, xs] + 0.18 * np.array(GREEN)).astype(np.uint8)
         if len(self.trail_world) > 1:                                       # true path
@@ -654,24 +679,24 @@ class SearchWatcher:
 
     def draw_free(self):
         """3D view: MuJoCo's render of the TRUE scene from the mouse-driven camera (display only), with the overlays."""
-        img = np.full((FREE_H, FREE_W, 3), 60, np.uint8)
+        img = np.full((self.fh, self.fw, 3), 60, np.uint8)
         if self.free_ok:
             v = self.view
             if self.follow:
                 v["lookat"][:2] = self.env.ground_truth()[:2]
             try:
                 rgb, depth, cam = self.env.render_free(v["lookat"], self._clear_distance(v), v["azimuth"], v["elevation"],
-                                                       FREE_W, FREE_H, fovy=FREE_FOVY, depth=v["elevation"] > -80.0)
+                                                       self.fw, self.fh, fovy=FREE_FOVY, depth=v["elevation"] > -80.0)
             except Exception as e:
                 self.free_ok = False
                 print("3D view disabled (could not render):", str(e).splitlines()[0][:100])
             else:
                 img = self._free_overlay(cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR), depth, cam)
         if not self.free_ok:
-            put(img, "no 3D view (GL unavailable)", (FREE_W // 2 - 140, FREE_H // 2), 0.6)
+            put(img, "no 3D view (GL unavailable)", (self.fw // 2 - 140, self.fh // 2), 0.6)
         put(img, f"3D view (simulator truth)   {self.level}{'   following the robot' if self.follow else ''}", (10, 20), 0.5)
         if self.result is not None:
             msg, col = ("DOCKED", GREEN) if self.result["docked"] else (self.result["outcome"].upper(), RED)
             (tw, _), _ = cv2.getTextSize(msg, FONT, 0.7, 2)
-            put(img, msg, (FREE_W - tw - 12, 26), 0.7, col, 2)
+            put(img, msg, (self.fw - tw - 12, 26), 0.7, col, 2)
         return img

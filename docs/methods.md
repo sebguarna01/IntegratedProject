@@ -452,7 +452,20 @@ the floor, and the gaze policies and synthetic sensors use the profile's horizon
 visible only from 0.49 m (0.33 m with the ideal camera), and tall markers leave the image sooner.
 
 **Body.** The head's generic camera block is replaced (through `MjSpec`, in any scene) by the D435i body: 90 x 25 x
-25 mm, front glass, colour lens and the two IR windows 50 mm apart. The colour lens is on the front face, 12.5 mm
+25 mm, front glass, colour lens and the two IR windows 50 mm apart.
+
+The placeholder post under it is replaced by a two-servo pan-tilt unit (`sim/realsense.py: build_pan_tilt`), built
+around the same joint axes:
+- pan: a ROBOTIS Dynamixel XL430 (28.5 x 46.5 x 34 mm, the TurtleBot3's servo family) lies on the top plate, horn on
+  the pan axis;
+- an aluminium U-bracket on its horn turns with the pan, its arms beside the camera up to the tilt axis;
+- tilt: a second XL430 is bolted to one arm, its horn on the tilt axis driving the camera through a side plate,
+  with an idler on the other arm.
+
+The bracket width follows the camera. All of these parts are visual only (no collision, no mass), so the physics is
+unchanged: the same trials give the same results. The XL430 is consistent with the head model: its 4096-step encoder
+(0.0015 rad) matches the 0.002 rad head encoder noise, and its no-load speed (about 6 rad/s) covers the 1.5 rad/s slew
+limit. The colour lens is on the front face, 12.5 mm
 ahead of the tilt axis and centred sideways. The centring is a simplification: on the module, the colour lens sits a
 few centimetres to one side. The head's mass and inertia are unchanged: 0.1 kg covers the 72 g camera and a bracket,
 and the servo's reflected inertia dominates the payload's.
