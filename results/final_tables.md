@@ -2,7 +2,7 @@
 
 Common cap 300 s: a longer run counts as a timeout. Intervals: Wilson (proportions), bootstrap over seeds (paired differences).
 
-Rooms block: 2160 trials (360 development and 360 held-out trials per config). Height block: 880 trials over dock heights 0.2, 0.25, 0.3, 0.35, 0.45, 0.6, 0.9 m.
+Rooms block: 2160 trials (360 development and 360 held-out trials per config). Height block: 1260 trials over dock heights 0.2, 0.25, 0.3, 0.35, 0.45, 0.6, 0.9 m.
 
 ## 1. Pooled scorecard (box: 25-75th percentile, line: median, whisker: 10-90th)
 
@@ -11,21 +11,21 @@ Rooms block: 2160 trials (360 development and 360 held-out trials per config). H
 | Rooms at standard marker heights | B | 720 | 712/720 (99%) | 69 | 17.9 | 0.90 | 0.21 | 0 |
 | Rooms at standard marker heights | C-sweep | 720 | 713/720 (99%) | 65 | 11.2 | 0.80 | 0.24 | 1 |
 | Rooms at standard marker heights | C-info | 720 | 708/720 (98%) | 67 | 11.5 | 0.80 | 0.25 | 6 |
-| All dock heights pooled | B | 280 | 133/280 (48%) | 56 | 15.6 | 0.92 | 0.14 | 0 |
-| All dock heights pooled | C-sweep | 280 | 165/280 (59%) | 54 | 7.8 | 0.85 | 0.18 | 0 |
-| All dock heights pooled | C-info | 320 | 297/320 (93%) | 56 | 10.2 | 0.80 | 0.14 | 1 |
+| All dock heights pooled | B | 400 | 186/400 (46%) | 56 | 16.0 | 0.92 | 0.13 | 0 |
+| All dock heights pooled | C-sweep | 400 | 230/400 (58%) | 54 | 8.0 | 0.85 | 0.18 | 0 |
+| All dock heights pooled | C-info | 460 | 425/460 (92%) | 56 | 10.1 | 0.79 | 0.14 | 1 |
 
 ## 2. Docking success by dock-marker height (development, held-out and fresh seeds pooled)
 
 | height | B | C-sweep | C-info | B, tilt free |
 |---|---|---|---|---|
-| 0.2 m | 54/80 (68%) | 63/80 (79%) | 60/80 (75%) | 17/20 (85%) |
-| 0.25 m | 39/40 (98%) | 40/40 (100%) | 40/40 (100%) | - |
-| 0.3 m | 38/40 (95%) | 40/40 (100%) | 40/40 (100%) | 19/20 (95%) |
-| 0.35 m | 2/40 (5%) | 22/40 (55%) | 40/40 (100%) | - |
-| 0.45 m | 0/40 (0%) | 0/40 (0%) | 40/40 (100%) | 0/20 (0%) |
-| 0.6 m | 0/40 (0%) | 0/40 (0%) | 39/40 (98%) | 0/20 (0%) |
-| 0.9 m | - | - | 38/40 (95%) | - |
+| 0.2 m | 69/100 (69%) | 80/100 (80%) | 75/100 (75%) | 17/20 (85%) |
+| 0.25 m | 59/60 (98%) | 59/60 (98%) | 59/60 (98%) | - |
+| 0.3 m | 56/60 (93%) | 60/60 (100%) | 59/60 (98%) | 19/20 (95%) |
+| 0.35 m | 2/60 (3%) | 31/60 (52%) | 60/60 (100%) | - |
+| 0.45 m | 0/60 (0%) | 0/60 (0%) | 59/60 (98%) | 0/20 (0%) |
+| 0.6 m | 0/60 (0%) | 0/60 (0%) | 58/60 (97%) | 0/20 (0%) |
+| 0.9 m | - | - | 55/60 (92%) | - |
 
 Seeds: development 0..19, held-out 5000..5019 (both at every height), 6000..6039 (0.2 m only). B and C-sweep were not run at 0.9 m (cannot dock above about 0.33 m).
 
@@ -115,39 +115,39 @@ Pooled over all 12 rooms:
 | rooms | B | 720 | 712 | 1 | 0 | 6 | 1 |
 | rooms | C-sweep | 720 | 713 | 0 | 1 | 4 | 2 |
 | rooms | C-info | 720 | 708 | 0 | 6 | 5 | 1 |
-| 0.2 m | B | 80 | 54 | 26 | 0 | 0 | 0 |
-| 0.2 m | C-sweep | 80 | 63 | 17 | 0 | 0 | 0 |
-| 0.2 m | C-info | 80 | 60 | 19 | 1 | 0 | 0 |
-| 0.25 m | B | 40 | 39 | 1 | 0 | 0 | 0 |
-| 0.25 m | C-sweep | 40 | 40 | 0 | 0 | 0 | 0 |
-| 0.25 m | C-info | 40 | 40 | 0 | 0 | 0 | 0 |
-| 0.3 m | B | 40 | 38 | 1 | 0 | 1 | 0 |
-| 0.3 m | C-sweep | 40 | 40 | 0 | 0 | 0 | 0 |
-| 0.3 m | C-info | 40 | 40 | 0 | 0 | 0 | 0 |
-| 0.35 m | B | 40 | 2 | 0 | 0 | 38 | 0 |
-| 0.35 m | C-sweep | 40 | 22 | 12 | 0 | 6 | 0 |
-| 0.35 m | C-info | 40 | 40 | 0 | 0 | 0 | 0 |
-| 0.45 m | B | 40 | 0 | 0 | 0 | 39 | 1 |
-| 0.45 m | C-sweep | 40 | 0 | 0 | 0 | 39 | 1 |
-| 0.45 m | C-info | 40 | 40 | 0 | 0 | 0 | 0 |
-| 0.6 m | B | 40 | 0 | 0 | 0 | 39 | 1 |
-| 0.6 m | C-sweep | 40 | 0 | 0 | 0 | 39 | 1 |
-| 0.6 m | C-info | 40 | 39 | 0 | 0 | 1 | 0 |
-| 0.9 m | C-info | 40 | 38 | 0 | 0 | 0 | 2 |
+| 0.2 m | B | 100 | 69 | 31 | 0 | 0 | 0 |
+| 0.2 m | C-sweep | 100 | 80 | 20 | 0 | 0 | 0 |
+| 0.2 m | C-info | 100 | 75 | 24 | 1 | 0 | 0 |
+| 0.25 m | B | 60 | 59 | 1 | 0 | 0 | 0 |
+| 0.25 m | C-sweep | 60 | 59 | 0 | 0 | 1 | 0 |
+| 0.25 m | C-info | 60 | 59 | 0 | 0 | 1 | 0 |
+| 0.3 m | B | 60 | 56 | 1 | 0 | 3 | 0 |
+| 0.3 m | C-sweep | 60 | 60 | 0 | 0 | 0 | 0 |
+| 0.3 m | C-info | 60 | 59 | 0 | 0 | 1 | 0 |
+| 0.35 m | B | 60 | 2 | 0 | 0 | 58 | 0 |
+| 0.35 m | C-sweep | 60 | 31 | 17 | 0 | 12 | 0 |
+| 0.35 m | C-info | 60 | 60 | 0 | 0 | 0 | 0 |
+| 0.45 m | B | 60 | 0 | 0 | 0 | 59 | 1 |
+| 0.45 m | C-sweep | 60 | 0 | 0 | 0 | 59 | 1 |
+| 0.45 m | C-info | 60 | 59 | 0 | 0 | 0 | 1 |
+| 0.6 m | B | 60 | 0 | 0 | 0 | 59 | 1 |
+| 0.6 m | C-sweep | 60 | 0 | 0 | 0 | 59 | 1 |
+| 0.6 m | C-info | 60 | 58 | 0 | 0 | 1 | 1 |
+| 0.9 m | C-info | 60 | 55 | 0 | 0 | 0 | 5 |
 
-## 6. False docks (the robot stops and claims the dock but misses the 0.10 m / 5 degree tolerance)
+## 6. False docks by dock height, height block (the robot stops and claims the dock but misses the 0.10 m / 5 degree tolerance)
 
 | height | B | C-sweep | C-info |
 |---|---|---|---|
-| 0.2 m | 26/80 | 17/80 | 19/80 |
-| 0.25 m | 2/760 | 0/760 | 0/760 |
-| 0.3 m | 1/40 | 0/40 | 0/40 |
-| 0.35 m | 0/40 | 12/40 | 0/40 |
-| 0.45 m | 0/40 | 0/40 | 0/40 |
-| 0.6 m | 0/40 | 0/40 | 0/40 |
-| 0.9 m | 0/0 | 0/0 | 0/40 |
+| 0.2 m | 31/100 | 20/100 | 24/100 |
+| 0.25 m | 1/60 | 0/60 | 0/60 |
+| 0.3 m | 1/60 | 0/60 | 0/60 |
+| 0.35 m | 0/60 | 17/60 | 0/60 |
+| 0.45 m | 0/60 | 0/60 | 0/60 |
+| 0.6 m | 0/60 | 0/60 | 0/60 |
+| 0.9 m | 0/0 | 0/0 | 0/60 |
 
-77 false docks in all; median heading error 6.8 deg, median position miss 18 mm.
+95 false docks in all (rooms at standard heights included: B 1, C-sweep 0, C-info 0); median heading error 6.7 deg, median position miss 18 mm.
 
 ## 7. LQR path follower against go_to_point, same seeds
 
@@ -250,26 +250,90 @@ Reproducibility: 720 of 720 gaze-block trials repeated the main-block outcome an
 
 | config | n | docked | median RMSE [mm] | median landmarks | median coverage [%] |
 |---|---|---|---|---|---|
-| B | 60 | 30/60 (50%) | 37.0 | 6 | 72 |
-| C-sweep | 60 | 32/60 (53%) | 22.8 | 6 | 66 |
-| C-info | 60 | 57/60 (95%) | 23.1 | 6 | 62 |
+| B | 90 | 47/90 (52%) | 41.3 | 7 | 70 |
+| C-sweep | 90 | 52/90 (58%) | 21.6 | 6 | 66 |
+| C-info | 90 | 84/90 (93%) | 24.1 | 6 | 66 |
 
 | pair | metric | seeds | difference [95% CI] |
 |---|---|---|---|
-| C-info - B | docking [pp] | 60 | +45.0 [+31.7, +58.3] |
-| C-info - B | RMSE [mm] | 60 | -15.5 [-24.0, -6.5] |
-| C-sweep - B | docking [pp] | 60 | +3.3 [-3.3, +10.0] |
-| C-sweep - B | RMSE [mm] | 60 | -13.0 [-17.2, -1.7] |
-| C-info - C-sweep | docking [pp] | 60 | +41.7 [+26.7, +55.0] |
-| C-info - C-sweep | RMSE [mm] | 60 | -1.8 [-4.3, +1.0] |
+| C-info - B | docking [pp] | 90 | +41.1 [+30.0, +52.2] |
+| C-info - B | RMSE [mm] | 90 | -17.0 [-21.7, -11.0] |
+| C-sweep - B | docking [pp] | 90 | +5.6 [+0.0, +11.1] |
+| C-sweep - B | RMSE [mm] | 90 | -17.2 [-26.6, -10.5] |
+| C-info - C-sweep | docking [pp] | 90 | +35.6 [+23.3, +47.8] |
+| C-info - C-sweep | RMSE [mm] | 90 | -0.8 [-2.5, +3.0] |
 
 ## 11. Tall docks (0.45 and 0.6 m) in the hardest rooms, C-info (seeds 9000..)
 
 | room | height | docked | median time [s] | median RMSE [mm] | contacts | timeouts |
 |---|---|---|---|---|---|---|
-| cluttered_14 | 0.45 m | 16/20 (80%) | 228 | 58.0 | 3 | 1 |
-| cluttered_14 | 0.6 m | 16/20 (80%) | 228 | 58.0 | 3 | 1 |
-| people_random | 0.45 m | 20/20 (100%) | 57 | 9.2 | 0 | 0 |
-| people_random | 0.6 m | 20/20 (100%) | 56 | 8.8 | 0 | 0 |
-| sparse_noisy_odom | 0.45 m | 18/20 (90%) | 48 | 28.5 | 1 | 1 |
-| sparse_noisy_odom | 0.6 m | 18/20 (90%) | 48 | 47.7 | 1 | 1 |
+| cluttered_14 | 0.45 m | 25/30 (83%) | 209 | 63.0 | 3 | 2 |
+| cluttered_14 | 0.6 m | 25/30 (83%) | 208 | 63.7 | 3 | 2 |
+| people_random | 0.45 m | 29/30 (97%) | 75 | 8.3 | 0 | 0 |
+| people_random | 0.6 m | 29/30 (97%) | 71 | 8.6 | 0 | 0 |
+| sparse_noisy_odom | 0.45 m | 28/30 (93%) | 50 | 43.1 | 1 | 1 |
+| sparse_noisy_odom | 0.6 m | 28/30 (93%) | 50 | 47.7 | 1 | 1 |
+
+## 12. Camera profile: RealSense D455 against the ideal camera (same seeds, same rooms and dock heights)
+
+Only the seeds the D455 runs have are used from the ideal camera, so every row compares like with like. Cells show ideal / D455.
+
+| scope | config | trials | docked ideal | docked D455 | median RMSE [mm] | median time to dock [s] | contacts | false docks |
+|---|---|---|---|---|---|---|---|---|
+| rooms, standard heights | B | 240 | 234/240 (98%) | 236/240 (98%) | 20.1 / 17.1 | 71 / 66 | 0 / 0 | 0 / 0 |
+| rooms, standard heights | C-sweep | 240 | 236/240 (98%) | 238/240 (99%) | 12.1 / 20.3 | 67 / 66 | 1 / 1 | 0 / 0 |
+| rooms, standard heights | C-info | 240 | 234/240 (98%) | 228/240 (95%) | 12.2 / 20.9 | 68 / 66 | 3 / 2 | 0 / 0 |
+| 0.2 m dock | B | 20 | 15/20 (75%) | 15/20 (75%) | 15.6 / 17.6 | 87 / 60 | 0 / 0 | 5 / 5 |
+| 0.2 m dock | C-sweep | 20 | 15/20 (75%) | 16/20 (80%) | 7.6 / 13.6 | 83 / 56 | 0 / 0 | 5 / 4 |
+| 0.2 m dock | C-info | 20 | 19/20 (95%) | 15/20 (75%) | 10.4 / 17.5 | 56 / 62 | 0 / 0 | 1 / 4 |
+| 0.25 m dock | B | 20 | 20/20 (100%) | 20/20 (100%) | 15.4 / 17.0 | 68 / 59 | 0 / 0 | 0 / 0 |
+| 0.25 m dock | C-sweep | 20 | 20/20 (100%) | 20/20 (100%) | 7.8 / 14.4 | 57 / 55 | 0 / 0 | 0 / 0 |
+| 0.25 m dock | C-info | 20 | 20/20 (100%) | 20/20 (100%) | 9.7 / 15.3 | 55 / 59 | 0 / 0 | 0 / 0 |
+| 0.3 m dock | B | 20 | 20/20 (100%) | 20/20 (100%) | 15.8 / 14.6 | 71 / 61 | 0 / 0 | 0 / 0 |
+| 0.3 m dock | C-sweep | 20 | 20/20 (100%) | 20/20 (100%) | 8.9 / 13.9 | 57 / 55 | 0 / 0 | 0 / 0 |
+| 0.3 m dock | C-info | 20 | 20/20 (100%) | 20/20 (100%) | 9.9 / 15.2 | 56 / 59 | 0 / 0 | 0 / 0 |
+| 0.35 m dock | B | 20 | 0/20 (0%) | 2/20 (10%) | 17.6 / 28.2 | nan / 111 | 0 / 0 | 0 / 0 |
+| 0.35 m dock | C-sweep | 20 | 9/20 (45%) | 11/20 (55%) | 7.8 / 17.6 | 42 / 57 | 0 / 0 | 7 / 9 |
+| 0.35 m dock | C-info | 20 | 20/20 (100%) | 20/20 (100%) | 10.6 / 16.8 | 56 / 58 | 0 / 0 | 0 / 0 |
+| 0.45 m dock | B | 20 | 0/20 (0%) | 0/20 (0%) | 24.4 / 32.5 | nan / nan | 0 / 0 | 0 / 0 |
+| 0.45 m dock | C-sweep | 20 | 0/20 (0%) | 0/20 (0%) | 7.5 / 12.4 | nan / nan | 0 / 0 | 0 / 0 |
+| 0.45 m dock | C-info | 20 | 20/20 (100%) | 20/20 (100%) | 10.8 / 15.3 | 56 / 59 | 0 / 0 | 0 / 0 |
+| 0.6 m dock | B | 20 | 0/20 (0%) | 0/20 (0%) | 26.5 / 38.0 | nan / nan | 0 / 0 | 0 / 0 |
+| 0.6 m dock | C-sweep | 20 | 0/20 (0%) | 0/20 (0%) | 9.6 / 17.0 | nan / nan | 0 / 0 | 0 / 0 |
+| 0.6 m dock | C-info | 20 | 20/20 (100%) | 19/20 (95%) | 10.3 / 15.1 | 56 / 72 | 0 / 0 | 0 / 0 |
+| 0.9 m dock | C-info | 20 | 19/20 (95%) | 18/20 (90%) | 12.7 / 14.4 | 56 / 75 | 0 / 0 | 0 / 0 |
+| mixed heights | B | 60 | 30/60 (50%) | 26/60 (43%) | 37.0 / 38.6 | 100 / 102 | 0 / 0 | 1 / 6 |
+| mixed heights | C-sweep | 60 | 32/60 (53%) | 29/60 (48%) | 22.8 / 35.4 | 94 / 90 | 0 / 0 | 1 / 3 |
+| mixed heights | C-info | 60 | 57/60 (95%) | 51/60 (85%) | 23.1 / 25.9 | 94 / 83 | 1 / 1 | 1 / 1 |
+
+Paired difference D455 minus ideal on the same seed [median or pp, 95% CI over seeds; nan = too few seeds for an interval]:
+
+| config | scope | seeds | docking [pp] | RMSE [mm] | time to dock [s] | contact [pp] |
+|---|---|---|---|---|---|---|
+| B | rooms, standard heights | 240 | +1 [-1, +3] | -0.1 [-1.2, +0.8] | -1 [-2, -1] | +0 [+0, +0] |
+| B | 0.2 m dock | 20 | +0 [-25, +25] | +0.9 [-3.9, +12.0] | -10 [-19, +3] | +0 [+0, +0] |
+| B | 0.25 m dock | 20 | +0 [+0, +0] | +1.8 [-1.8, +8.5] | -5 [-18, +0] | +0 [+0, +0] |
+| B | 0.3 m dock | 20 | +0 [+0, +0] | -0.3 [-3.1, +5.5] | -11 [-30, -1] | +0 [+0, +0] |
+| B | 0.35 m dock | 20 | +10 [+0, +25] | +11.0 [+2.6, +22.7] | - | +0 [+0, +0] |
+| B | 0.45 m dock | 20 | +0 [+0, +0] | +17.2 [+2.7, +23.0] | - | +0 [+0, +0] |
+| B | 0.6 m dock | 20 | +0 [+0, +0] | +9.5 [+4.9, +21.2] | - | +0 [+0, +0] |
+| B | mixed heights | 60 | -7 [-17, +3] | +0.2 [-9.0, +6.6] | -4 [-18, -1] | +0 [+0, +0] |
+| C-sweep | rooms, standard heights | 240 | +1 [+0, +2] | +1.6 [+0.5, +5.8] | -0 [-1, -0] | +0 [+0, +0] |
+| C-sweep | 0.2 m dock | 20 | +5 [-15, +25] | +2.6 [+0.7, +15.4] | -2 [-4, +5] | +0 [+0, +0] |
+| C-sweep | 0.25 m dock | 20 | +0 [+0, +0] | +1.2 [-0.2, +15.9] | -1 [-6, -0] | +0 [+0, +0] |
+| C-sweep | 0.3 m dock | 20 | +0 [+0, +0] | +1.1 [-0.8, +15.7] | -1 [-6, -0] | +0 [+0, +0] |
+| C-sweep | 0.35 m dock | 20 | +10 [-25, +40] | +0.6 [-2.1, +17.6] | +10 [-17, +119] | +0 [+0, +0] |
+| C-sweep | 0.45 m dock | 20 | +0 [+0, +0] | +4.3 [+0.4, +13.0] | - | +0 [+0, +0] |
+| C-sweep | 0.6 m dock | 20 | +0 [+0, +0] | +8.6 [-0.7, +15.0] | - | +0 [+0, +0] |
+| C-sweep | mixed heights | 60 | -5 [-13, +2] | +4.2 [+0.4, +17.6] | -0 [-2, +2] | +0 [+0, +0] |
+| C-info | rooms, standard heights | 240 | -2 [-6, +1] | +3.5 [+2.1, +5.6] | +0 [-0, +0] | -0 [-2, +1] |
+| C-info | 0.2 m dock | 20 | -20 [-40, +0] | +4.6 [+1.1, +12.3] | +2 [-1, +4] | +0 [+0, +0] |
+| C-info | 0.25 m dock | 20 | +0 [+0, +0] | +3.3 [-0.0, +11.1] | +0 [-1, +1] | +0 [+0, +0] |
+| C-info | 0.3 m dock | 20 | +0 [+0, +0] | +3.4 [+0.1, +10.3] | -0 [-2, +1] | +0 [+0, +0] |
+| C-info | 0.35 m dock | 20 | +0 [+0, +0] | +2.9 [+0.3, +10.3] | -1 [-3, +0] | +0 [+0, +0] |
+| C-info | 0.45 m dock | 20 | +0 [+0, +0] | +1.7 [-1.2, +11.3] | +0 [-1, +1] | +0 [+0, +0] |
+| C-info | 0.6 m dock | 20 | -5 [-15, +0] | +2.2 [-0.4, +11.2] | -0 [-2, +1] | +0 [+0, +0] |
+| C-info | 0.9 m dock | 20 | -5 [-15, +0] | +2.8 [-5.5, +9.7] | -1 [-4, +1] | +0 [+0, +0] |
+| C-info | mixed heights | 60 | -10 [-20, -2] | +2.1 [-0.8, +10.2] | +0 [-2, +2] | +0 [-5, +5] |
+
+How to read it. The D455 is fine to take into a full study if, at the standard heights, docking stays within a few points of the ideal camera with no rise in contacts, the estimation error does not get clearly worse, and the dock-height result survives (C-info still docks at 0.45 and 0.6 m; B and C-sweep still cannot). A drop that the interval excludes zero for, or new false docks, means the estimator or the heading rule needs a look before spending a full study on it.

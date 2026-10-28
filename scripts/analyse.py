@@ -96,7 +96,9 @@ def pct(rows):
     """(percent docked, lower, upper) with a Wilson 95% interval."""
     n, k = len(rows), sum(r["ok"] for r in rows)
     lo, hi = wilson_interval(k, n)
-    return 100 * k / n, 100 * lo, 100 * hi
+    p = k / n
+    lo, hi = min(lo, p), max(hi, p)             # float rounding can put the interval a hair inside p (a negative error bar)
+    return 100 * p, 100 * lo, 100 * hi
 
 
 def md_table(head, body):
@@ -464,6 +466,73 @@ def main():
         save(fig, "11_tall_hard_rooms.png")
         out += ["## 11. Tall docks (0.45 and 0.6 m) in the hardest rooms, C-info (seeds 9000..)\n",
                 md_table(["room", "height", "docked", "median time [s]", "median RMSE [mm]", "contacts", "timeouts"], body), ""]
+
+    # ============================================================== 12. camera profile (D455) against the ideal camera, same seeds
+    cams = load("d455_pilot") + load("d455_full")
+    if cams:
+        ideal = main_rows + held + hrows + mixed
+        grp = lambda r: ("rooms, standard heights" if r["layout"] == "fixed" else "mixed heights" if "+heights" in r["layout"] else f"{r['z']:g} m dock")
+        dr = [dict(r, layout=r["layout"].replace("+d455", ""), config=r["config"] + "|d455") for r in cams]
+        keys = {(r["level"], r["layout"], r["seed"]) for r in dr}
+        ir = [dict(r, config=r["config"] + "|ideal") for r in ideal if (r["level"], r["layout"], r["seed"]) in keys]
+        both = ir + dr
+        groups = ["rooms, standard heights"] + sorted({grp(r) for r in dr} - {"rooms, standard heights"}, key=lambda g: (g.startswith("mixed"), float(g.split()[0]) if g[0].isdigit() else 0))
+        body, bars = [], {}
+        for g in groups:
+            for c in CFGS:
+                a = [r for r in ir if r["config"] == c + "|ideal" and grp(r) == g]
+                b = [r for r in dr if r["config"] == c + "|d455" and grp(r) == g]
+                if not b:
+                    continue
+                bars[(g, c)] = (a, b)
+                body.append([g, c, len(b), frac(a), frac(b), f"{med(a, 'pos_rmse_m', 1000):.1f} / {med(b, 'pos_rmse_m', 1000):.1f}",
+                             f"{med([r for r in a if r['ok']], 'duration_s'):.0f} / {med([r for r in b if r['ok']], 'duration_s'):.0f}",
+                             f"{sum(r['outcome'] == 'contact' for r in a)} / {sum(r['outcome'] == 'contact' for r in b)}",
+                             f"{sum(r['outcome'] == 'false dock' for r in a)} / {sum(r['outcome'] == 'false dock' for r in b)}"])
+        out += ["## 12. Camera profile: RealSense D455 against the ideal camera (same seeds, same rooms and dock heights)\n",
+                "Only the seeds the D455 runs have are used from the ideal camera, so every row compares like with like. Cells show ideal / D455.\n",
+                md_table(["scope", "config", "trials", "docked ideal", "docked D455", "median RMSE [mm]", "median time to dock [s]", "contacts", "false docks"], body), ""]
+        fig, axs = plt.subplots(1, 2, figsize=(11, 3.8), gridspec_kw={"width_ratios": [1.6, 1]})
+        w = 0.13
+        for gi, g in enumerate(groups):
+            for ci, c in enumerate(CFGS):
+                if (g, c) not in bars:
+                    continue
+                for ki, (rows_, hatch, al) in enumerate(zip(bars[(g, c)], ["", "//"], [0.55, 1.0])):
+                    if not rows_:
+                        continue
+                    p_, lo, hi = pct(rows_); x = gi + (ci * 2 + ki - 2.5) * w
+                    axs[0].bar(x, p_, width=w, color=COL[c], alpha=al, hatch=hatch, edgecolor="white")
+                    axs[0].errorbar(x, p_, yerr=[[p_ - lo], [hi - p_]], color="k", lw=0.7, capsize=1.5)
+        axs[0].set_xticks(range(len(groups))); axs[0].set_xticklabels(groups, fontsize=8); axs[0].set_ylim(0, 108); axs[0].set_ylabel("docked [%]")
+        axs[0].set_title("Docking: ideal (plain) against D455 (hatched), per config"); style(axs[0])
+        std = "rooms, standard heights"
+        for ci, c in enumerate(CFGS):
+            for ki, key in enumerate(["ideal", "d455"]):
+                v = vals([r for r in both if r["config"] == f"{c}|{key}" and grp(r) == std], "pos_rmse_m", 1000)
+                if len(v):
+                    bp = axs[1].boxplot(v, positions=[ci * 2.4 + ki * 0.9], widths=0.7, showfliers=False, patch_artist=True, medianprops=dict(color="k"))
+                    bp["boxes"][0].set(facecolor=COL[c], alpha=0.55 if key == "ideal" else 1.0, hatch="" if key == "ideal" else "//")
+        axs[1].set_xticks([ci * 2.4 + 0.45 for ci in range(3)]); axs[1].set_xticklabels(CFGS); axs[1].set_ylabel("position RMSE [mm]")
+        axs[1].set_title("Estimation, standard heights (ideal / D455)"); style(axs[1])
+        save(fig, "12_camera_d455.png")
+        body = []
+        for c in CFGS:
+            for g in groups:
+                sub = [r for r in both if grp(r) == g]
+                if not [r for r in sub if r["config"] == c + "|d455"]:
+                    continue
+                cells = []
+                for k, sc, nd in [("docked", 1, 0), ("pos_rmse_m", 1000, 1), ("duration_s", 1, 0), ("contact", 1, 0)]:
+                    m = cmp_row(sub, c + "|d455", c + "|ideal", k)
+                    cells.append(fmt_ci(m, sc, nd))
+                body.append([c, g, len({(r["level"], r["seed"]) for r in sub if r["config"] == c + "|d455"})] + cells)
+        out += ["Paired difference D455 minus ideal on the same seed [median or pp, 95% CI over seeds; nan = too few seeds for an interval]:\n",
+                md_table(["config", "scope", "seeds", "docking [pp]", "RMSE [mm]", "time to dock [s]", "contact [pp]"], body), "",
+                "How to read it. The D455 is fine to take into a full study if, at the standard heights, docking stays within a few points of the ideal "
+                "camera with no rise in contacts, the estimation error does not get clearly worse, and the dock-height result survives (C-info still docks "
+                "at 0.45 and 0.6 m; B and C-sweep still cannot). A drop that the interval excludes zero for, or new false docks, means the estimator or "
+                "the heading rule needs a look before spending a full study on it.\n"]
 
     (RES / "final_tables.md").write_text("\n".join(out))
     print("\n".join(out))
