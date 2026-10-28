@@ -50,9 +50,13 @@ for b in $BLOCKS; do case $b in
            for l in large_6_pillars cluttered_14 people_random; do
              cmds+=("$PY --trials 10 --level $l --dir results/d455_pilot --tag _$l --set camera=d455"); done
            cmds+=("$PY --trials 10 --level large_6_pillars --dock-height 0.3 0.45 0.6 --dir results/d455_pilot --tag _height --set camera=d455") ;;
-  d455full) # the full study with the D455: all 12 rooms at the standard heights (seeds 0..), then the dock heights (run d455pilot first)
-           for l in $LEVELS; do cmds+=("$PY --level $l --dir results/d455_full --tag _$l --set camera=d455"); done
-           cmds+=("$PY --level large_6_pillars --dock-height 0.2 0.25 0.3 0.35 0.45 0.6 --dir results/d455_full --tag _height --set camera=d455") ;;
+  d455full) # the D455 as a robustness check on the ideal-camera study. Same folder as d455pilot (finished seeds are skipped, so the two
+           # never double count). TRIALS=10 gives seeds 0..9; re-run with TRIALS=20 to add 10..19. Order = priority: rooms first, then the
+           # dock heights the pilot did not cover (0.2 / 0.25 / 0.35 m, all configs; 0.9 m, C-info only), then mixed marker heights.
+           for l in $LEVELS; do cmds+=("$PY --level $l --dir results/d455_pilot --tag _$l --set camera=d455"); done
+           cmds+=("$PY --level large_6_pillars --dock-height 0.2 0.25 0.35 0.3 0.45 0.6 --dir results/d455_pilot --tag _height --set camera=d455")
+           cmds+=("$PY --level large_6_pillars --configs C-info --dock-height 0.9 --dir results/d455_pilot --tag _height09 --set camera=d455")
+           for l in large_6_pillars large_9_pillars cluttered_14; do cmds+=("$PY --level $l --heights --dir results/d455_pilot --tag _mixed_$l --set camera=d455 seed=8000"); done ;;
   tilt)    cmds+=("$PY --level large_6_pillars --configs B --dock-height $HEIGHTS --dir results/tilt_free --tag _B_tilt_free --set search.fixed_tilt=null") ;;
   sens)    # Q: odometry process noise, R: marker measurement noise
            Q05="ekf.k_ds=0.01 ekf.k_dth=0.015 ekf.k_dth_ds=0.005";  Q2="ekf.k_ds=0.04 ekf.k_dth=0.06 ekf.k_dth_ds=0.02"
