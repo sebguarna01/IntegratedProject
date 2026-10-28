@@ -4,7 +4,7 @@
 #   SENSOR=synthetic TRIALS=2 JOBS=2 bash scripts/run_studies.sh   # quick smoke test of the plumbing
 # Re-running continues where it left off (finished seeds are skipped). One --tag per command, so no two processes share a file.
 # Blocks: main (levels, seeds 0..), height (dock height), heldout (seeds 5000.., never tuned on), tilt (B with its tilt free: separates
-# the value of tilt from the value of panning), lqr (the LQR follower on the same seeds), sens (estimator noise Q and R scaled by 0.5 and 2).
+# the value of tilt from the value of panning), d455pilot / d455full (the RealSense D455 camera profile; not in the default BLOCKS), lqr (the LQR follower on the same seeds), sens (estimator noise Q and R scaled by 0.5 and 2).
 set -u
 SENSOR=${SENSOR:-camera}; TRIALS=${TRIALS:-20}; CAP=${CAP:-300}; JOBS=${JOBS:-2}
 BLOCKS=${BLOCKS:-"main height heldout tilt lqr sens gaze mixed tallhard height_more false02 heldout_all"}
@@ -44,6 +44,15 @@ for b in $BLOCKS; do case $b in
            cmds+=("$PY --level large_6_pillars --configs C-info --dock-height 0.9 --dir results/heldout --tag _height_more09 --set seed=5000") ;;
   heldout_all) # every room on held-out seeds (the rooms already done are skipped): per-room comparisons on 40 seeds, never tuned on
            for l in $LEVELS; do cmds+=("$PY --level $l --dir results/heldout --tag _$l --set seed=5000"); done ;;
+  d455pilot) # a small first look at the RealSense D455 camera profile (global shutter, 90 x 59 deg, real lens, latency 0.06 s; the
+           # robot's algorithms are unchanged). 10 seeds, same seeds as the ideal-camera runs, so every trial can be paired with its ideal twin:
+           # three rooms at the standard marker heights, then the dock-height effect (0.3 / 0.45 / 0.6 m) in large_6_pillars.
+           for l in large_6_pillars cluttered_14 people_random; do
+             cmds+=("$PY --trials 10 --level $l --dir results/d455_pilot --tag _$l --set camera=d455"); done
+           cmds+=("$PY --trials 10 --level large_6_pillars --dock-height 0.3 0.45 0.6 --dir results/d455_pilot --tag _height --set camera=d455") ;;
+  d455full) # the full study with the D455: all 12 rooms at the standard heights (seeds 0..), then the dock heights (run d455pilot first)
+           for l in $LEVELS; do cmds+=("$PY --level $l --dir results/d455_full --tag _$l --set camera=d455"); done
+           cmds+=("$PY --level large_6_pillars --dock-height 0.2 0.25 0.3 0.35 0.45 0.6 --dir results/d455_full --tag _height --set camera=d455") ;;
   tilt)    cmds+=("$PY --level large_6_pillars --configs B --dock-height $HEIGHTS --dir results/tilt_free --tag _B_tilt_free --set search.fixed_tilt=null") ;;
   sens)    # Q: odometry process noise, R: marker measurement noise
            Q05="ekf.k_ds=0.01 ekf.k_dth=0.015 ekf.k_dth_ds=0.005";  Q2="ekf.k_ds=0.04 ekf.k_dth=0.06 ekf.k_dth_ds=0.02"

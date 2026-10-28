@@ -160,20 +160,6 @@ def test_b_and_c_sweep_tilt_is_locked_for_the_whole_run():
         assert np.allclose(tilts, float(cfg["search"]["fixed_tilt"])), conf
 
 
-def test_study_plots_render(tmp_path):
-    from activenav.evaluation.study_plots import make_all
-    rows = []
-    for c in ("B", "C-sweep", "C-info"):
-        for i in range(6):
-            rows.append(dict(level="two_rooms", layout="fixed", config=c, seed=str(i), outcome="docked", docked=str(int(i % 2 == 0)),
-                             duration_s=str(30.0 + 10 * i), min_clearance_m="0.2", landmark_err_m="0.01", path_length_m="9",
-                             dock_height_m=str([0.25, 0.6][i % 2])))
-    paths = make_all(rows, tmp_path)
-    assert len(paths) >= 5 and all(p.exists() for p in paths)
-    assert (tmp_path / "summary" / "02_headline_by_room.png").exists() and (tmp_path / "detail" / "effects_of_dock_height.png").exists()
-    assert all("detail" not in str(p) for p in make_all(rows, tmp_path / "s", view="summary"))
-
-
 def test_dock_height_option_and_new_metrics():
     from activenav.config import load_config
     from activenav.evaluation.worlds import ScenarioError

@@ -1,4 +1,4 @@
-"""Paired comparison of configs: counts, exact test, cluster bootstrap, scopes, taxonomy and the figures."""
+"""Paired comparison of configs: counts, exact test, cluster bootstrap, tolerant CSV reading."""
 import math
 
 import numpy as np
@@ -78,34 +78,6 @@ def test_clusters_are_seeds_not_single_trials():
             rows += [_row("r", "B", s, 0, layout=f"h{z}", z=z), _row("r", "C-info", s, 1, layout=f"h{z}", z=z)]
     m = {x["metric"]: x for x in paired.compare(rows, "C-info", "B")}["docked"]
     assert m["n"] == 30 and m["n_seeds"] == 3 and m["lo"] != m["lo"]
-
-
-def test_scopes_split_by_room_and_dock_height_band():
-    rows = _rows(10, 5, 0, "r1") + _rows(10, 5, 0, "r2")
-    assert list(paired.scope_rows(rows, "room")) == ["all rooms", "r1", "r2"]
-    hi = [dict(r, dock_height_m="0.6", layout="fixed+dock0.6") for r in rows]
-    scopes = paired.scope_rows(rows + hi, "band")
-    assert any("level camera" in k for k in scopes) and any("tilt needed" in k for k in scopes)
-    assert [paired.dock_band(dict(dock_height_m=str(z))) for z in (0.2, 0.3, 0.35, 0.4, 0.9)] == ["level", "level", "borderline", "tilt", "tilt"]
-
-
-def test_taxonomy_shares_sum_to_one_and_report_prints():
-    rows = _rows(20, 14, 0)
-    rows[0]["outcome"] = "contact"
-    for t in paired.taxonomy(rows):
-        assert sum(t[k] for k in ("docked", "false dock", "contact", "timeout", "gave up")) == pytest.approx(1.0)
-    txt = paired.format_report(rows)
-    assert "all rooms" in txt and "14W 0L" in txt.replace("\n", " ")
-
-
-def test_paired_figures_render(tmp_path):
-    from activenav.evaluation import study_plots as sp
-    rows = _rows(20, 14, 0, "r1") + _rows(20, 6, 2, "r2")
-    sp._style()
-    assert sp.fig_paired_effects(rows, tmp_path / "a.png").exists()
-    assert sp.fig_paired_effects(rows, tmp_path / "b.png", by="band").exists()
-    assert sp.fig_outcomes(rows, tmp_path / "c.png").exists()
-    assert sp.fig_paired_effects([r for r in rows if r["config"] == "B"], tmp_path / "d.png") is None      # nothing to pair
 
 
 # ------------------------------------------------------------------------------------------------ tolerant CSV reading

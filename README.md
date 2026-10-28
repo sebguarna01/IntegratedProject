@@ -26,7 +26,7 @@ The camera head is not passive. A small behaviour layer (Curious, Attentive, Cau
 | Part | Approach |
 |---|---|
 | Simulator | MuJoCo, TurtleBot3 from `robotis_mujoco_menagerie` with a pan-tilt head added |
-| Sensors | Wheel encoders, pan/tilt joint encoders, monocular RGB camera (ideal pinhole by default; `--set camera=d435i` simulates an Intel RealSense D435i colour camera: real optics, rolling shutter, motion blur, sensor noise, latency) |
+| Sensors | Wheel encoders, pan/tilt joint encoders, monocular RGB camera (ideal pinhole by default; `--set camera=d435i` or `camera=d455` simulates an Intel RealSense colour camera: real optics, shutter, motion blur, sensor noise, latency) |
 | Landmarks and dock | ArUco markers at known positions |
 | State estimation | Extended Kalman Filter, state `[x, y, theta]` |
 | Obstacle detection | Colour segmentation plus monocular ground-plane ranging |
@@ -117,20 +117,18 @@ python scripts/characterise_markers.py                      # marker measurement
 python scripts/ekf_crossing.py                              # known-map EKF check (consistency, bias states)
 python scripts/search_study.py --sensor camera --level large_room --trials 20   # one study
 SENSOR=camera JOBS=4 bash scripts/run_studies.sh   # the whole final study: all levels, dock heights, held-out seeds, tilt-free B, Q/R sensitivity (one 300 s cap)
+python scripts/analyse.py                                   # every table (results/final_tables.md) and figure (results/figures/final/) from the CSVs
 python scripts/watch_search.py                              # live viewer (3D view: mouse to rotate / move / zoom)
-python scripts/watch_search.py --set camera=d435i           # same, with the simulated RealSense D435i colour camera
-python scripts/watch_search.py --set camera=d455            # or the RealSense D455 colour camera (global shutter, 90 deg)
+python scripts/watch_search.py --set camera=d455            # same, with the simulated RealSense D455 colour camera (global shutter, 90 deg)
 pytest                                                      # unit tests
 ```
-
-Camera profiles (`docs/methods.md`, "Head camera profiles"): `--set camera=d435i` works with every script that takes
-`--set`. Its calibration, marker characterisation and figure are `results/camera_calibration_d435i.csv`,
-`results/marker_characterisation_d435i.csv` and `results/figures/camera_profiles.png` (`scripts/camera_profile_figure.py`).
 
 ```bash
 python scripts/model_analysis.py                           # controllability and observability
 python scripts/calibrate_camera.py                         # checkerboard calibration and frame-chain check (needs GL)
 ```
+
+Camera profiles (`docs/methods.md`, "Head camera profiles"): `--set camera=d435i|d455` works with every script that takes `--set`; calibration, marker characterisation and figures are in `results/` (`scripts/camera_profile_figure.py`).
 
 LQR vs go-to-point tracking comparison: `scripts/lqr_tracking.py` (results in docs/methods.md).
 

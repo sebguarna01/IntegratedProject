@@ -329,18 +329,18 @@ def main():
     fd = [r for r in allr if r["outcome"] == "false dock"]
     if fd:
         fig, (ax, ax2) = plt.subplots(1, 2, figsize=(10, 3.6))
-        zs = sorted({r["z"] for r in allr})
+        zs = sorted({r["z"] for r in hrows})
         for ci, c in enumerate(CFGS):
-            ax.bar(np.arange(len(zs)) + (ci - 1) * 0.27, [100 * sum(r["outcome"] == "false dock" for r in pick(allr, c, z=z)) / max(1, len(pick(allr, c, z=z))) for z in zs],
+            ax.bar(np.arange(len(zs)) + (ci - 1) * 0.27, [100 * sum(r["outcome"] == "false dock" for r in pick(hrows, c, z=z)) / max(1, len(pick(hrows, c, z=z))) for z in zs],
                    width=0.25, color=COL[c], label=c)
         ax.set_xticks(range(len(zs))); ax.set_xticklabels([f"{z:g}" for z in zs]); ax.set_xlabel("dock marker height [m]"); ax.set_ylabel("false docks [% of trials]")
         ax.set_title("False docks by dock height"); ax.legend(frameon=False, fontsize=8); style(ax)
         ax2.hist(vals(fd, "yaw_err_deg"), bins=np.arange(5, 17, 1), color="#d9a400"); ax2.axvline(5, color="k", lw=0.8, ls="--")
         ax2.set_xlabel("heading error at the dock [deg] (limit 5)"); ax2.set_title(f"False docks: {np.mean(vals(fd, 'miss_m') <= 0.10) * 100:.0f}% were inside the 0.10 m position limit"); ax2.title.set_fontsize(8); style(ax2)
         save(fig, "06_false_docks.png")
-        out += ["## 6. False docks (the robot stops and claims the dock but misses the 0.10 m / 5 degree tolerance)\n",
-                md_table(["height"] + CFGS, [[f"{z:g} m"] + [f"{sum(r['outcome'] == 'false dock' for r in pick(allr, c, z=z))}/{len(pick(allr, c, z=z))}" for c in CFGS] for z in zs]),
-                f"\n{len(fd)} false docks in all; median heading error {np.median(vals(fd, 'yaw_err_deg')):.1f} deg, median position miss {np.median(vals(fd, 'miss_m')) * 1000:.0f} mm.\n"]
+        out += ["## 6. False docks by dock height, height block (the robot stops and claims the dock but misses the 0.10 m / 5 degree tolerance)\n",
+                md_table(["height"] + CFGS, [[f"{z:g} m"] + [f"{sum(r['outcome'] == 'false dock' for r in pick(hrows, c, z=z))}/{len(pick(hrows, c, z=z))}" for c in CFGS] for z in zs]),
+                f"\n{len(fd)} false docks in all (rooms at standard heights included: B {sum(r['outcome'] == 'false dock' for r in pick(rooms_rows, 'B'))}, C-sweep {sum(r['outcome'] == 'false dock' for r in pick(rooms_rows, 'C-sweep'))}, C-info {sum(r['outcome'] == 'false dock' for r in pick(rooms_rows, 'C-info'))}); median heading error {np.median(vals(fd, 'yaw_err_deg')):.1f} deg, median position miss {np.median(vals(fd, 'miss_m')) * 1000:.0f} mm.\n"]
 
     # ============================================================== 7. LQR follower
     if lqr:

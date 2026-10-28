@@ -137,8 +137,8 @@ Run them like any other level, e.g. `python scripts/search_study.py --sensor cam
 
 ## Study metrics: what each column means, and which ones to lead with
 
-Every trial of `scripts/search_study.py` writes one CSV row. `--report` prints the tables and writes charts to
-`results/figures/study_<sensor>/` (`--plots` for charts only, `--no-plots` for tables only).
+Every trial of `scripts/search_study.py` writes one CSV row. `python scripts/analyse.py` turns the CSVs into every table
+(`results/final_tables.md`) and figure (`results/figures/final/`).
 
 ### Two views: `--view summary | detail | both` (default both)
 
@@ -203,7 +203,7 @@ Pre-register these four as the primary comparison; everything else is there to e
 | `n_replans` | Exploration replans |
 | `min_clearance_m` | Closest approach of the robot's edge to an obstacle (below 0 = contact) |
 
-### Paired comparison (`evaluation/paired.py`; the last tables of `--report`, figures 04 and 05)
+### Paired comparison (`evaluation/paired.py`; tables in `final_tables.md`, figures 04 and 05)
 Every config meets the same start, layout, dock height and people on the same seed, so the question to ask of two configs is
 "on the same trial, who did better?". A **pair** is one (room, layout, seed) that both configs finished. For `C-info vs B`,
 `C-sweep vs B` and `C-info vs C-sweep` the report gives, per room (all rooms pooled first) and per room x dock-height band:
@@ -240,7 +240,7 @@ file at once (originals are kept as `.bak`).
 
 ### A common time cap, and re-running rows
 `--max-time` only truncates a run; the run itself is deterministic. So any run can be analysed as if it had a shorter cap:
-`--report --cap 200` counts every run longer than 200 s as a timeout (columns that summarise the whole run are blanked for those rows).
+`python scripts/analyse.py --cap 200` counts every run longer than 200 s as a timeout (columns that summarise the whole run are blanked for those rows).
 It cannot lengthen a run, so 200 s is the longest cap you can impose on files that were run with 200 s. In the camera dataset the cap
 changes the size of the gaps, not the ranking: median docking time is 74 s and 99% of docked runs finish within 235 s.
 `--redo` deletes the existing rows of exactly the command you give (level, configs, dock heights, seeds; the original file is kept as
@@ -369,11 +369,11 @@ One script holds every trial, with one time cap (`CAP`, 300 s) for all of it. `-
 | tilt | config B with the tilt free (`search.fixed_tilt=null`: search tilt while exploring, dock tilt close in) at the same heights, to separate the effect of tilt from that of panning. It still has only two preset tilts | `results/tilt_free/` |
 | sens | estimator noise scaled by 0.5 and 2: Q (`k_ds`, `k_dth`, `k_dth_ds`) and R (`range_sigma`, `bearing_sigma_rad`, `normal_sigma_deg`), B and C-info, `large_6_pillars` | `results/sens_Q05`, `sens_Q2`, `sens_R05`, `sens_R2` |
 
-Report any block with `python scripts/search_study.py --sensor camera --dir results/heldout --report --cap 300`. A smoke test of the plumbing: `SENSOR=synthetic TRIALS=2 CAP=120 bash scripts/run_studies.sh`.
+Every block is reported by `python scripts/analyse.py --cap 300`. A smoke test of the plumbing: `SENSOR=synthetic TRIALS=2 CAP=120 bash scripts/run_studies.sh`.
 
 ## Final study results (camera sensor, 300 s cap, 20 seeds per cell)
 
-Data: `results/` (main), `results/height/`, `results/heldout/` (seeds 5000..5019), `results/tilt_free/`, `results/lqr/`, `results/sens_*/`. Reports: `python scripts/search_study.py --sensor camera --dir <folder> --report --cap 300`. Intervals are Wilson (success) or cluster bootstrap over seeds (paired).
+Data: `results/` (main), `results/height/`, `results/heldout/` (seeds 5000..5019), `results/tilt_free/`, `results/lqr/`, `results/sens_*/`. Reports: `python scripts/analyse.py --cap 300`. Intervals are Wilson (success) or cluster bootstrap over seeds (paired).
 
 **Main block, 12 rooms (240 trials per config).** Docking: B 234/240, C-sweep 236/240, C-info 234/240. Paired success differences are not significant (C-info vs B +0 pp [-2, +2], McNemar p = 1.0). All these rooms hang the markers where the level camera can see them, so the head has no docking advantage to give. What the head does change is estimation: median position RMSE B 20.1 mm, C-sweep 12.1 mm, C-info 12.2 mm; paired RMSE difference vs B -4 mm [-6, -2] (C-info) and -5 mm [-7, -3] (C-sweep). The gap is larger in the hard rooms (`cluttered_14`: 75.6 / 61.9 / 45.3 mm; `sparse_noisy_odom`: 64.0 / 43.5 / 44.7 mm). NEES inside the 95% band: B 0.90, active configs 0.79 (the active heads are less consistent than B, which sits nearer the nominal 0.95; this study does not tell over- from under-confidence).
 
@@ -406,7 +406,7 @@ The process-noise scale (Q) and the doubled measurement noise change almost noth
 
 ## Rebuilding the numbers, and the gaze-behaviour metrics
 
-`python scripts/analyse_final.py` rebuilds every table and figure above from the CSVs (`results/final_tables.md`, `results/figures/final/`), skipping any block that is missing. Blocks `adapt` (B and C-sweep with the dock-time tilt rule of C-info, tilt otherwise free: separates the dock rule from information-driven search) and `gaze` (head behaviour) are in `scripts/run_studies.sh`.
+`python scripts/analyse.py` rebuilds every table and figure above from the CSVs (`results/final_tables.md`, `results/figures/final/`), skipping any block that is missing. Block `gaze` (all 12 rooms, same seeds as the main block, so outcomes reproduce it exactly and the gaze columns are added) is in `scripts/run_studies.sh`.
 
 `evaluation/search.gaze_metrics` adds five descriptors of the head to each new trial: `gaze_switch_per_min` (pan reversals), `gaze_dwell_med_s` (median time the world-frame gaze stays still), `gaze_toward_travel` (share of moving time looking within 0.6 rad of the direction of travel), `gaze_lead_s` (lag at which the pan best predicts the body's later heading change; exploratory, can sit at the 4 s edge of its search range) and `pan_std_rad`. They are descriptive cues in the sense used in the human-robot interaction literature on legible, goal-directed motion; they say nothing about how people perceive the robot, which would need participants.
 
