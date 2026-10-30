@@ -213,11 +213,13 @@ class DockingEnv:
         return img
 
     def render_free(self, lookat, distance: float, azimuth: float, elevation: float, width: int = 640, height: int = 480,
-                    fovy: float | None = None, depth: bool = False):
+                    fovy: float | None = None, depth: bool = False, cutaway=(), stub: float = 0.12):
         """Image from MuJoCo's free camera, not the robot's: aimed at `lookat` [m] from `distance` [m], `azimuth` and
         `elevation` in degrees (MuJoCo's convention: elevation -90 looks straight down), vertical field of view `fovy`
         [deg] (default: the model's). Returns (rgb uint8 (H, W, 3), depth, cam): depth (H, W) [m along the view axis]
         only with depth=True (else None), and cam the camera MuJoCo drew with (mjvGLCamera), to project points.
+        `cutaway`: ids of box geoms (walls) drawn cut down to `stub` metres high in this image only, so they do not hide
+        the room in an oblique view (architectural cutaway). The model and every other camera are unaffected.
 
         DISPLAY ONLY (the live viewer's top view). It has its own renderer and never touches the random generator,
         so it cannot change a trial. The head camera has its own field of view, so `fovy` does not affect it."""
@@ -241,6 +243,14 @@ class DockingEnv:
             r.update_scene(self.data, camera=c)
         finally:
             vis.fovy = fovy0
+        if cutaway:                                     # cut the chosen walls down in this frame's scene only
+            cut = set(int(i) for i in cutaway)
+            sc = r.scene
+            for k in range(sc.ngeom):
+                g = sc.geoms[k]
+                if g.objtype == mujoco.mjtObj.mjOBJ_GEOM and g.objid in cut:
+                    g.size[2] = stub / 2
+                    g.pos[2] = stub / 2
         img = r.render().copy()
         dep = None
         if depth:                                   # same scene, second pass for the depth buffer

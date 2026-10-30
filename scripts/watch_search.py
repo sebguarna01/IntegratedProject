@@ -11,7 +11,10 @@
 Left: the 3D view, the TRUE scene rendered by MuJoCo from a camera you move with the mouse. It starts straight above
 the room (framed on whichever room is loaded) and shows the true path and robot (blue), the head's field of view (green)
 and the marker ids. Mouse: left drag rotate | right drag (or shift + left drag) move | wheel (or z / x) zoom |
-double-click (or o) back to the view from above; f follows the robot. Below it: the status panel.
+double-click (or o) back to the view from above; f follows the robot. Camera presets, framed on the whole room: o from
+above, b oblique from a corner (press again: the next corner), e lower from a side (again: the next side), g orbit around
+the room (one turn per 40 s; g again stops it). In oblique views the walls between the camera and the room are cut down
+(3D view only). --view starts in one of them (e.g. for a video). Below the 3D view: the status panel.
 Right: the head camera, and below it the map the robot is building in its OWN start frame (grey unknown, white free,
 dark obstacle), landmarks it found (marker 10 red), its path and frontier target (star), belief (orange with 2 sigma
 ellipse) and the head's field of view. `t` overlays the true room (green) so you can judge the map. Configs: 1 B
@@ -19,7 +22,7 @@ ellipse) and the head's field of view. `t` overlays the true room (green) so you
 The window opens shrunk to fit the screen if needed (Windows; --scale sets it by hand) and can be resized or maximised:
 the panels are laid out again at the window's size, so the 3D view, camera and map grow and the text stays sharp.
 Keys: space pause | + / - speed | r restart | n / p seed | 1-3 config | l level | m random markers | d random dock | h marker heights |
-      t truth | f follow robot | o view from above | z / x zoom | v record | s screenshot | q quit
+      t truth | o from above | b corner views | e side views | g orbit | f follow robot | z / x zoom | v record | s screenshot | q quit
 """
 import argparse
 import time
@@ -62,6 +65,7 @@ def main():
     ap.add_argument("--at", type=float, default=None)
     ap.add_argument("--set", nargs="*", default=[], metavar="KEY=VALUE")
     ap.add_argument("--no-free-view", action="store_true", help="original layout: head camera | map, no 3D view")
+    ap.add_argument("--view", default="top", help="3D view to start with: top, corner1-4, side1-4, orbit, follow")
     args = ap.parse_args()
     apply_overrides(cfg, args.set)
     if args.list:
@@ -81,6 +85,14 @@ def main():
                           args.random_markers, args.random_dock, seeds, args.heights, free=not args.no_free_view)
     except ScenarioError as e:
         raise SystemExit(f"error: {e}")
+    if w.free and args.view != "top":                # starting view of the 3D panel
+        kind = args.view.rstrip("1234")
+        if kind not in ("corner", "side", "orbit", "follow"):
+            raise SystemExit(f"error: --view {args.view}: use top, corner1-4, side1-4, orbit or follow")
+        if kind == "follow":
+            w.start_follow()
+        else:
+            w.set_view(kind, int(args.view[-1]) - 1 if args.view[-1].isdigit() else 0)
 
     if args.video or args.png:
         import os

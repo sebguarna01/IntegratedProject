@@ -118,7 +118,9 @@ python scripts/ekf_crossing.py                              # known-map EKF chec
 python scripts/search_study.py --sensor camera --level large_room --trials 20   # one study
 SENSOR=camera JOBS=4 bash scripts/run_studies.sh   # the whole final study: all levels, dock heights, held-out seeds, tilt-free B, Q/R sensitivity (one 300 s cap)
 python scripts/analyse.py                                   # every table (results/final_tables.md) and figure (results/figures/final/) from the CSVs
-python scripts/watch_search.py                              # live viewer (3D view: mouse to rotate / move / zoom)
+python scripts/watch_search.py                              # live viewer (3D view: mouse to rotate / move / zoom;
+                                                            #   keys o above, b corners, e sides, g orbit, f follow)
+python scripts/watch_search.py --level cluttered_14 --view orbit --video results/videos/orbit.mp4   # offscreen video
 python scripts/watch_search.py --set camera=d455            # same, with the simulated RealSense D455 colour camera (global shutter, 90 deg)
 pytest                                                      # unit tests
 ```

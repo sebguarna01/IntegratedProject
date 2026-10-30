@@ -35,11 +35,18 @@ SIDE_W, SIDE_CAM_H, SIDE_MAP_H = 560, 420, 354
 FREE_FOVY = 30.0               # 3D view field of view [deg]: narrower than MuJoCo's 45 so tall walls take less of the top view
 FREE_PAD = 0.25                # margin around the room in the view from above [m]
 FOLLOW_HALF = 2.5              # f (follow): floor visible above and below the robot when looking straight down [m]
+# camera presets of the 3D view (keys): o from above, b oblique from a corner, e lower from a side (each press: the next
+# corner or side), g orbit around the room. Azimuth = the horizontal direction the camera looks along (MuJoCo).
+CORNER_AZ = (45.0, 135.0, 225.0, 315.0)      # from the south-west, south-east, north-east, north-west corner
+SIDE_AZ = (90.0, 180.0, 270.0, 0.0)          # from the south, east, north, west side
+VIEW_ELEVATION = {"corner": -38.0, "side": -26.0, "orbit": -32.0}   # [deg]
+ORBIT_PERIOD = 40.0            # g: seconds of simulated time for one turn around the room
+VIEW_NAMES = {"top": "from above", "corner": "corner view", "side": "side view", "orbit": "orbit"}
 FONT = cv2.FONT_HERSHEY_SIMPLEX
 KEYS = ("keys: space pause | + / - speed | r restart | n / p seed | 1-3 config B C-sweep C-info | l level | m random markers | "
         "d random dock | h marker heights | t show truth | v record | s screenshot | q quit")
 MOUSE = ("3D view: left drag rotate | right drag (or shift + left drag) move | wheel (or z / x) zoom | "
-         "double-click (or o) view from above | f follow the robot")
+         "o (or double-click) from above | b corner views | e side views | g orbit | f follow the robot")
 
 
 def project(cam, pts, w, h, depth=None):
@@ -162,6 +169,7 @@ class SearchWatcher:
         self.free, self.follow, self.free_ok = free, False, True
         self.view, self._view_env, self._drag, self._mouse = None, None, None, (-1, -1)
         self._moved = False                       # the user moved the 3D view (a window resize then keeps it as it is)
+        self.preset, self.orbit, self.orbit_t0, self.orbit_az0 = ("top", 0), False, 0.0, 0.0   # camera preset, orbit
         # panel sizes of the 3D-view layout (set_size lays them out over the window; these are the native ones)
         self.fw, self.fh, self.ih, self.sw, self.sch, self.smh = FREE_W, FREE_H, INFO_H, SIDE_W, SIDE_CAM_H, SIDE_MAP_H
         self.writer_size = None
@@ -203,11 +211,13 @@ class SearchWatcher:
         self.cam_img, self.render_ok = None, True
         self.next_display, self.budget, self.result, self._n = 0.0, 0.0, None, 0
         self._sample()
-        if self.free and self.env is not self._view_env:                     # another room: frame the 3D view on it
+        if self.free and self.env is not self._view_env:                     # another room: the same kind of view, framed on it
             self._view_env, follow = self.env, self.follow
-            self.reset_view()
+            self.set_view(*self.preset)
             if follow:
                 self.start_follow()
+        elif self.free and self.orbit:                                       # same room, new run: the orbit carries on
+            self.orbit_t0, self.orbit_az0 = self.session.t, self.view["azimuth"]
 
     def _sample(self):
         s = self.session
@@ -310,6 +320,15 @@ class SearchWatcher:
             self.reset_view() if self.follow else self.start_follow()
         elif self.free and c == "o":
             self.reset_view()
+        elif self.free and c == "b":
+            self.set_view("corner")
+        elif self.free and c == "e":
+            self.set_view("side")
+        elif self.free and c == "g":
+            if self.orbit:                                                   # stop where it is
+                self.orbit, self._moved = False, True
+            else:
+                self.set_view("orbit")
         elif self.free and c in ("z", "x"):
             self.zoom(1 if c == "z" else -1)
         return True
@@ -326,7 +345,61 @@ class SearchWatcher:
         d = room["height"] + max((across / 2 + FREE_PAD) * self.fh / self.fw, along / 2 + FREE_PAD) / t
         self.view = dict(lookat=np.array([(x0 + x1) / 2, (y0 + y1) / 2, 0.0]), distance=float(d),
                          azimuth=90.0 if wide else 180.0, elevation=-90.0)   # 90: +x right, +y up; 180: +y right, +x down
-        self.follow, self._moved = False, False
+        self.follow, self._moved, self.preset, self.orbit = False, False, ("top", 0), False
+
+    def _fit_distance(self, lookat, azimuth, elevation, margin=1.06):
+        """Smallest camera distance at which the whole room (walls to their tops) fits in the 3D view, for that angle."""
+        a, e = np.radians(azimuth), np.radians(elevation)
+        fwd = np.array([np.cos(e) * np.cos(a), np.cos(e) * np.sin(a), np.sin(e)])
+        up = np.array([-np.sin(e) * np.cos(a), -np.sin(e) * np.sin(a), np.cos(e)])
+        right = np.cross(fwd, up)
+        ty = np.tan(np.radians(FREE_FOVY) / 2)
+        tx = ty * self.fw / self.fh
+        x0, x1, y0, y1 = self._room_geometry()["box"]
+        h = self._room_geometry()["height"]
+        q = np.array([[x, y, z] for x in (x0, x1) for y in (y0, y1) for z in (0.0, h)]) - np.asarray(lookat, float)
+        need = np.maximum(np.abs(q @ right) / tx, np.abs(q @ up) / ty) * margin - q @ fwd   # depth >= extent / tan(fov/2)
+        return float(max(need.max(), 1.0))
+
+    def set_view(self, kind: str, index=None):
+        """Camera presets of the 3D view, framed on the whole room: "top" (key o), "corner" (b: oblique from a corner;
+        each call the next one), "side" (e: lower, from a side; each call the next one), "orbit" (g: circles the room,
+        one turn per ORBIT_PERIOD s of simulated time). Stops following the robot."""
+        if kind == "top":
+            self.reset_view()
+            return
+        x0, x1, y0, y1 = self._room_geometry()["box"]
+        centre = np.array([(x0 + x1) / 2, (y0 + y1) / 2, 0.0])
+        el = VIEW_ELEVATION[kind]
+        if kind == "orbit":
+            az = self.view["azimuth"] if self.view is not None and self.preset[0] in ("corner", "side") else CORNER_AZ[0]
+            d = max(self._fit_distance(centre, a, el) for a in range(0, 360, 10))   # fits at every angle of the turn
+            self.orbit, self.orbit_t0, self.orbit_az0, index = True, self.session.t, float(az), 0
+        else:
+            azs = CORNER_AZ if kind == "corner" else SIDE_AZ
+            if index is None:                                                # the next corner or side
+                index = (self.preset[1] + 1) % len(azs) if self.preset[0] == kind else 0
+            az = azs[index % len(azs)]
+            d = self._fit_distance(centre, az, el)
+            self.orbit = False
+        self.view = dict(lookat=centre, distance=float(d), azimuth=float(az), elevation=el)
+        self.preset, self.follow, self._moved = (kind, int(index)), False, False
+
+    def _cutaway(self, v, dist):
+        """Outer walls between the 3D-view camera and the room (cut down in the image so they do not hide it)."""
+        if v["elevation"] <= -80.0:
+            return ()
+        room = self._room_geometry()
+        x0, x1, y0, y1 = room["box"]
+        c = np.array([(x0 + x1) / 2, (y0 + y1) / 2])
+        a, e = np.radians(v["azimuth"]), np.radians(v["elevation"])
+        cam = np.asarray(v["lookat"], float)[:2] - dist * np.cos(e) * np.array([np.cos(a), np.sin(a)])
+        out = []
+        for gid, wc in room["walls"]:
+            n = (wc - c) / max(np.linalg.norm(wc - c), 1e-9)
+            if (cam - c) @ n > (wc - c) @ n:                                 # the camera is beyond this wall
+                out.append(gid)
+        return out
 
     def set_size(self, width: int, height: int):
         """Lay the 3D-view layout out over a window of width x height pixels, with the native proportions (3D view 780 of
@@ -341,13 +414,13 @@ class SearchWatcher:
         self.smh = H - self.sch
         if self.view is not None and not self._moved:
             follow = self.follow
-            self.reset_view()
+            self.set_view(*self.preset)
             if follow:
                 self.start_follow()
 
     def start_follow(self):
         """Keep the robot in the centre and come closer; the viewing angle stays as it is."""
-        self.follow = True
+        self.follow, self.orbit = True, False
         self.view["distance"] = max(FOLLOW_HALF / np.tan(np.radians(FREE_FOVY) / 2), self._room_geometry()["height"] + 1.0)
 
     def zoom(self, notches):
@@ -358,6 +431,8 @@ class SearchWatcher:
         """Mouse drag of (dx, dy) pixels on the 3D view."""
         v = self.view
         self._moved = True
+        if mode in ("rotate", "move"):             # the user takes the camera: an automatic orbit stops
+            self.orbit = False
         if mode == "rotate":                       # orbit the look-at point (MuJoCo viewer convention)
             v["azimuth"] = (v["azimuth"] - 0.3 * dx) % 360.0
             v["elevation"] = float(np.clip(v["elevation"] - 0.3 * dy, -90.0, -5.0))
@@ -611,12 +686,16 @@ class SearchWatcher:
         if self._room is None:
             m = self.env.model
             lo, hi = np.full(3, np.inf), np.full(3, -np.inf)
+            walls = []                                                      # the four outer walls (cut away in oblique views)
             for g in range(m.ngeom):
                 name = mujoco.mj_id2name(m, mujoco.mjtObj.mjOBJ_GEOM, g) or ""
                 if name.startswith("wall_"):                                # outer walls and wall blocks: axis-aligned boxes
                     lo = np.minimum(lo, m.geom_pos[g] - m.geom_size[g])
                     hi = np.maximum(hi, m.geom_pos[g] + m.geom_size[g])
-            self._room = dict(box=(lo[0], hi[0], lo[1], hi[1]), height=float(hi[2]), markers=self.env.marker_map())
+                if name in ("wall_north", "wall_south", "wall_east", "wall_west"):
+                    walls.append((g, np.array(m.geom_pos[g][:2], float)))
+            self._room = dict(box=(lo[0], hi[0], lo[1], hi[1]), height=float(hi[2]), markers=self.env.marker_map(),
+                              walls=walls)
         return self._room
 
     def _free_overlay(self, img, depth, cam):
@@ -684,9 +763,13 @@ class SearchWatcher:
             v = self.view
             if self.follow:
                 v["lookat"][:2] = self.env.ground_truth()[:2]
+            if self.orbit:                                                   # one turn per ORBIT_PERIOD s of simulated time
+                v["azimuth"] = (self.orbit_az0 + 360.0 * (self.session.t - self.orbit_t0) / ORBIT_PERIOD) % 360.0
+            dist = self._clear_distance(v)
             try:
-                rgb, depth, cam = self.env.render_free(v["lookat"], self._clear_distance(v), v["azimuth"], v["elevation"],
-                                                       self.fw, self.fh, fovy=FREE_FOVY, depth=v["elevation"] > -80.0)
+                rgb, depth, cam = self.env.render_free(v["lookat"], dist, v["azimuth"], v["elevation"],
+                                                       self.fw, self.fh, fovy=FREE_FOVY, depth=v["elevation"] > -80.0,
+                                                       cutaway=self._cutaway(v, dist))
             except Exception as e:
                 self.free_ok = False
                 print("3D view disabled (could not render):", str(e).splitlines()[0][:100])
@@ -694,7 +777,10 @@ class SearchWatcher:
                 img = self._free_overlay(cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR), depth, cam)
         if not self.free_ok:
             put(img, "no 3D view (GL unavailable)", (self.fw // 2 - 140, self.fh // 2), 0.6)
-        put(img, f"3D view (simulator truth)   {self.level}{'   following the robot' if self.follow else ''}", (10, 20), 0.5)
+        kind, idx = self.preset
+        name = ("following the robot" if self.follow else "orbit" if self.orbit else "your view" if self._moved
+                else VIEW_NAMES[kind] + (f" {idx + 1}/4" if kind in ("corner", "side") else ""))
+        put(img, f"3D view (simulator truth)   {self.level}   {name}", (10, 20), 0.5)
         if self.result is not None:
             msg, col = ("DOCKED", GREEN) if self.result["docked"] else (self.result["outcome"].upper(), RED)
             (tw, _), _ = cv2.getTextSize(msg, FONT, 0.7, 2)
