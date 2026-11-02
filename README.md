@@ -7,7 +7,7 @@ A TurtleBot3 Waffle Pi with a pan-tilt camera head, simulated in MuJoCo, searche
 
 
 ## Demo video
-...
+**[Watch the demo video (Google Drive)](https://drive.google.com/file/d/1PDyGCf_cWFDS-7GbgnAEWZXzLjs51qTt/view?usp=sharing)**
 
 ## 1. Summary
 
