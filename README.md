@@ -2,7 +2,7 @@
 
 A TurtleBot3 Waffle Pi with a pan-tilt camera head, simulated in MuJoCo, searches an unknown room using only wheel odometry and one camera, finds an ArUco marker and docks on it. **Does actively moving the camera head help the robot know where it is and dock?**
 
-**Course:** 41014 / 42043 Sensors and Control in Mechatronics Systems, Assessment 4 (Integrated Project) · **Track:** own project (Track A extension) · **Team:** Team 10 · **Demo video:** ...
+**Course:** 41014 / 42043 Sensors and Control in Mechatronics Systems, Assessment 4 (Integrated Project) · **Track:** own project (Track A extension) · **Team:** Team 10
 
 
 
