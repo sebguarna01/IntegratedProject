@@ -131,12 +131,12 @@ SENSOR=camera JOBS=2 bash scripts/run_studies.sh           # the whole study (BL
 python scripts/analyse.py                                  # every table and figure from the CSVs
 pytest                                                     # 137 tests
 python scripts/model_analysis.py                           # controllability and observability
-python scripts/calibrate_camera.py                         # checkerboard calibration and frame-chain check (needs GL)
+python scripts/calibrate_camera.py                         # checkerboard calibration
 ```
 
 Other scripts: `odometry_baseline.py`, `characterise_markers.py`, `ekf_crossing.py`, `lqr_tracking.py`, `gaze_trace_figure.py`, `make_side_by_side.sh`. Trials are deterministic per machine.
 
-## 8. Coverage of the assessment
+## 8. Assessment Coverage
 
 | Element | Where |
 |---|---|
@@ -171,18 +171,35 @@ docs/           methods, metrics, demo video plan
 results/        data by block, final tables and figures
 ```
 
-## 10. Contributions
+## 10. Future work
+
+**General**
+- **Physical hardware:** run the same agent on a real Waffle Pi with a pan-tilt head and a RealSense D455; calibrate the real camera, measure real latency and marker noise, and compare with the simulated D455 profile.
+- **Obstacle detection for real scenes:** replace floor ranging with a learned detector (for example YOLO) or depth, so that floors, lighting and obstacle types are not constrained.
+- **Navigation with fewer markers:** add visual features or loop closure to the EKF-SLAM so the robot does not depend on ArUco markers being visible for localisation.
+- **Safety of active gaze:** C-info touched obstacles slightly more often than B; add an obstacle-aware term to the gaze policy and test it against the contact count.
+- **Docking robustness:** handle the 0.2 m heading boundary (false docks) with a final heading check before declaring success.
+- **Harder conditions:** lighting changes, motion blur at higher speeds, and moving obstacles that are predicted rather than only avoided.
+
+**MOXI Specific**
+- **Platform:** move from the TurtleBot to the MOXI design, with its own head, body and sensing.
+- **Expressive states:** extend the gaze policy from "where is it useful to look" to states that convey character, for example attentive, curious or hesitant, driven by the robot's uncertainty and intent.
+- **Goals:** change the task from docking to social or assistive goals, with gaze serving both perception and communication.
+- **Perception study:** test with participants whether directed gaze such as C-info's is read as purposeful or having character, compared with a mechanical sweep.
+
+
+## 11. Contributions
 
 | Member | Contribution |
 |---|---|
 | Sebastiano Guarna | |
 | Dorian Veloso | |
 
-## 11. Generative AI declaration
+## 12. Generative AI declaration
 
 Claude (Anthropic) was used as a supplementary coding assistant during the development and implementation of the experiments. The code was developed by the author(s), using lecture and tutorial materials as the primary foundation. Claude was used when assistance was needed to work through coding difficulties, troubleshoot errors, understand why they occurred, and improve the clarity, consistency and overall structure of the code. It also helped explore approaches to evaluating the performance of different experimental configurations, refine tests to meet requirements, and review code for potential errors and improvements. Claude also assisted with writing the analysis and plotting scripts and with drafting the documentation, and it produced the shell script (`scripts/run_studies.sh`) that streamlined and automated the data collection, allowing large batches of trials to run continuously over long periods. The experimental design, selection of configurations, implementation decisions, execution and validation of experiments, and interpretation of results were undertaken by the author(s).
 
-## 12. Acknowledgements
+## 13. Acknowledgements
 
 - **MOXI:** the information-driven head (C-info) is inspired by my master's thesis on the MOXI concept robot
 - Robot models: [ROBOTIS MuJoCo Menagerie](https://github.com/ROBOTIS-GIT/robotis_mujoco_menagerie)
