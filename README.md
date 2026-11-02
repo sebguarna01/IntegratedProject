@@ -192,8 +192,9 @@ results/        data by block, final tables and figures
 
 | Member | Contribution |
 |---|---|
-| Sebastiano Guarna | |
-| Dorian Veloso | |
+| Sebastiano Guarna | **Core system:** project concept and research question; robot model, controllability and observability analysis; calibration and frame chain; EKF-SLAM, occupancy map, planner, controller and the search-and-dock agent; the B, C-sweep and C-info head behaviours. **Experiments and write-up:** experiment design, statistics, data collection and analysis; README and documentation. |
+| Dorian Veloso | **Realistic camera:** simulated RealSense D435i and D455 profiles (lens distortion, vignetting, noise, motion blur, latency), their calibration and marker characterisation, and integration into the codebase. **Video:** demo video footage. |
+
 
 ## 12. Generative AI declaration
 
